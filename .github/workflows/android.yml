@@ -1,0 +1,68 @@
+name: Build Android
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Install Android NDK
+        run: sdkmanager --install "ndk;25.2.9519653"
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: 4.3.7
+
+      - name: Install hmm
+        run: haxelib install hmm
+
+      - name: Cache haxelib dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/haxelib
+          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          restore-keys: |
+            ${{ runner.os }}-haxelib-
+
+      - name: Install dependencies
+        run: haxelib run hmm install
+
+      - name: Setup Lime
+        run: haxelib run lime setup -y
+
+      - name: Build Android
+        run: haxelib run lime build android -final
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.2.9519653
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-Android
+          path: export/android/bin/app/build/outputs/apk
+          
