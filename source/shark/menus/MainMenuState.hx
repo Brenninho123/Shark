@@ -25,9 +25,8 @@ class MainMenuState extends FlxState
 		historyText.setFormat(null, 16, FlxColor.WHITE, LEFT);
 		add(historyText);
 
-		inputField = new FlxInputText(20, FlxG.height - 60, FlxG.width - 40, "", 16);
+		inputField = new FlxInputText(20, FlxG.height - 60, FlxG.width - 40, "", 16, FlxColor.WHITE);
 		inputField.backgroundColor = FlxColor.GRAY;
-		inputField.textColor = FlxColor.WHITE;
 		add(inputField);
 
 		sendHint = new FlxText(20, FlxG.height - 80, FlxG.width - 40, "Press ENTER to send");
