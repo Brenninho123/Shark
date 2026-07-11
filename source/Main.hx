@@ -10,10 +10,12 @@ import openfl.errors.Error;
 import openfl.events.Event;
 import openfl.events.UncaughtErrorEvent;
 import shark.menus.MainMenuState;
+import shark.mobile.StorageUtil;
 
 class Main extends Sprite
 {
 	public static var lastError:String = "";
+	public static var storageReady:Bool = false;
 
 	public function new()
 	{
@@ -35,6 +37,7 @@ class Main extends Sprite
 	{
 		setupStage();
 		setupErrorHandling();
+		setupStorage();
 		setupGame();
 
 		#if debug
@@ -58,6 +61,14 @@ class Main extends Sprite
 		if (stage.loaderInfo.uncaughtErrorEvents != null)
 			stage.loaderInfo.uncaughtErrorEvents.addEventListener(UncaughtErrorEvent.UNCAUGHT_ERROR, onUncaughtError);
 		#end
+	}
+
+	function setupStorage():Void
+	{
+		storageReady = StorageUtil.ensureContentFolder();
+
+		if (!storageReady)
+			lastError = "Could not prepare content storage folder";
 	}
 
 	function setupGame():Void
