@@ -3,6 +3,7 @@ package;
 import flixel.FlxG;
 import flixel.FlxGame;
 import lime.manager.LimeManager;
+import lime.ui.KeyCode;
 import openfl.display.FPS;
 import openfl.display.Sprite;
 import openfl.display.StageAlign;
@@ -11,7 +12,6 @@ import openfl.errors.Error;
 import openfl.events.Event;
 import openfl.events.KeyboardEvent;
 import openfl.events.UncaughtErrorEvent;
-import openfl.ui.Keyboard;
 import shark.menus.MainMenuState;
 
 class Main extends Sprite
@@ -124,7 +124,7 @@ class Main extends Sprite
 	function onKeyDown(e:KeyboardEvent):Void
 	{
 		#if android
-		if (e.keyCode == Keyboard.BACK)
+		if (e.keyCode == KeyCode.APP_CONTROL_BACK)
 		{
 			e.preventDefault();
 			handleBackButton();
