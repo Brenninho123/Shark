@@ -22,7 +22,10 @@ class Online
 			timer.stop();
 
 		timer = new Timer(Std.int(checkInterval * 1000));
-		timer.run = checkNow;
+		timer.run = function():Void
+		{
+			checkNow();
+		};
 	}
 
 	public static function stop():Void
