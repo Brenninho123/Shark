@@ -7,6 +7,18 @@
 		"hxcpp": {
 			"type": "haxelib",
 			"version": "4.3.2"
+		},
+		"flixel": {
+			"type": "haxelib",
+			"version": "5.9.0"
+		},
+		"flixel-addons": {
+			"type": "haxelib",
+			"version": "3.2.3"
+		},
+		"flixel-ui": {
+			"type": "haxelib",
+			"version": "2.5.0"
 		}
 	}
 }
