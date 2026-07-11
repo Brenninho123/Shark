@@ -2,20 +2,22 @@ package;
 
 import flixel.FlxG;
 import flixel.FlxGame;
+import lime.manager.LimeManager;
 import openfl.display.FPS;
 import openfl.display.Sprite;
 import openfl.display.StageAlign;
 import openfl.display.StageScaleMode;
 import openfl.errors.Error;
 import openfl.events.Event;
+import openfl.events.KeyboardEvent;
 import openfl.events.UncaughtErrorEvent;
+import openfl.ui.Keyboard;
 import shark.menus.MainMenuState;
-import shark.mobile.StorageUtil;
 
 class Main extends Sprite
 {
 	public static var lastError:String = "";
-	public static var storageReady:Bool = false;
+	public static var isActive(default, null):Bool = true;
 
 	public function new()
 	{
@@ -37,7 +39,11 @@ class Main extends Sprite
 	{
 		setupStage();
 		setupErrorHandling();
-		setupStorage();
+		setupLifecycle();
+		setupInput();
+
+		LimeManager.initialize();
+
 		setupGame();
 
 		#if debug
@@ -63,12 +69,17 @@ class Main extends Sprite
 		#end
 	}
 
-	function setupStorage():Void
+	function setupLifecycle():Void
 	{
-		storageReady = StorageUtil.ensureContentFolder();
+		stage.addEventListener(Event.ACTIVATE, onActivate);
+		stage.addEventListener(Event.DEACTIVATE, onDeactivate);
+	}
 
-		if (!storageReady)
-			lastError = "Could not prepare content storage folder";
+	function setupInput():Void
+	{
+		#if android
+		stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
+		#end
 	}
 
 	function setupGame():Void
@@ -92,6 +103,44 @@ class Main extends Sprite
 			FlxG.game.x = 0;
 			FlxG.game.y = 0;
 		}
+	}
+
+	function onActivate(e:Event):Void
+	{
+		isActive = true;
+
+		if (FlxG.sound != null)
+			FlxG.sound.resume();
+	}
+
+	function onDeactivate(e:Event):Void
+	{
+		isActive = false;
+
+		if (FlxG.sound != null)
+			FlxG.sound.pause();
+	}
+
+	function onKeyDown(e:KeyboardEvent):Void
+	{
+		#if android
+		if (e.keyCode == Keyboard.BACK)
+		{
+			e.preventDefault();
+			handleBackButton();
+		}
+		#end
+	}
+
+	function handleBackButton():Void
+	{
+		if (FlxG.state == null)
+			return;
+
+		if (Std.isOfType(FlxG.state, MainMenuState))
+			return;
+
+		FlxG.switchState(new MainMenuState());
 	}
 
 	function onUncaughtError(e:UncaughtErrorEvent):Void
