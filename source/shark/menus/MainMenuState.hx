@@ -68,7 +68,6 @@ class MainMenuState extends FlxState
 
 		sendButton = new FlxButton(historyPad + inputWidth + 10, FlxG.height - inputHeight - 20, "Send", onSendPressed);
 		sendButton.setSize(isMobile ? 110 : 90, inputHeight);
-		sendButton.resize(isMobile ? 110 : 90, inputHeight);
 		sendButton.color = COLOR_WAVE;
 		sendButton.label.color = COLOR_FOAM;
 		add(sendButton);
