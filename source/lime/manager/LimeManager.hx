@@ -6,11 +6,11 @@ import shark.mobile.StorageUtil;
 class LimeManager
 {
 	public static var platform(default, null):String;
-	public static var isMobileTarget(default, null):Bool;
-	public static var isDesktopTarget(default, null):Bool;
-	public static var isWebTarget(default, null):Bool;
-	public static var isDebugBuild(default, null):Bool;
-	public static var supportsFileStorage(default, null):Bool;
+	public static var isMobileTarget(default, null):Bool = false;
+	public static var isDesktopTarget(default, null):Bool = false;
+	public static var isWebTarget(default, null):Bool = false;
+	public static var isDebugBuild(default, null):Bool = false;
+	public static var supportsFileStorage(default, null):Bool = false;
 
 	public static var buildVersion:String = "0.1.0";
 
@@ -51,15 +51,6 @@ class LimeManager
 		#else
 		platform = "unknown";
 		#end
-
-		if (isMobileTarget == null)
-			isMobileTarget = false;
-
-		if (isDesktopTarget == null)
-			isDesktopTarget = false;
-
-		if (isWebTarget == null)
-			isWebTarget = false;
 
 		#if debug
 		isDebugBuild = true;
