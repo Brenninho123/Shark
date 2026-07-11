@@ -2,17 +2,20 @@ package lime;
 
 import lime.tools.HXProject;
 import lime.tools.Platform;
-import lime.tools.PlatformTarget;
 import lime.tools.Architecture;
 import lime.tools.Asset;
 import lime.tools.AssetType;
 import lime.tools.Haxelib;
 import lime.tools.Icon;
-import lime.tools.NDLL;
-import lime.tools.Window;
+import lime.tools.Certificate;
 
 class Build extends HXProject
 {
+	static inline var APP_TITLE:String = "Shark";
+	static inline var APP_PACKAGE:String = "com.brenninho.shark";
+	static inline var APP_VERSION:String = "0.1.0";
+	static inline var APP_COMPANY:String = "Brenninho";
+
 	public function new()
 	{
 		super();
@@ -23,7 +26,9 @@ class Build extends HXProject
 		setupSource();
 		setupHaxelibs();
 		setupAssets();
+		setupIcon();
 		setupDefines();
+		setupOptimizations();
 
 		switch (target)
 		{
@@ -45,17 +50,18 @@ class Build extends HXProject
 
 	function setupMeta():Void
 	{
-		meta.title = "Shark";
+		meta.title = APP_TITLE;
 		meta.description = "An artificial intelligence made with HaxeFlixel.";
-		meta.packageName = "com.brenninho.shark";
-		meta.version = "0.1.0";
-		meta.company = "Brenninho";
+		meta.packageName = APP_PACKAGE;
+		meta.version = APP_VERSION;
+		meta.company = APP_COMPANY;
+		meta.buildNumber = resolveBuildNumber();
 	}
 
 	function setupApp():Void
 	{
 		app.main = "Main";
-		app.file = "Shark";
+		app.file = APP_TITLE;
 		app.path = "export";
 	}
 
@@ -67,6 +73,7 @@ class Build extends HXProject
 		window.background = 0x000000;
 		window.hardware = true;
 		window.vsync = false;
+		window.antialiasing = 0;
 	}
 
 	function setupSource():Void
@@ -86,10 +93,29 @@ class Build extends HXProject
 		assets.push(new Asset("assets", "assets", AssetType.BINARY));
 	}
 
+	function setupIcon():Void
+	{
+		icons.push(new Icon("assets/images/icon.png"));
+	}
+
 	function setupDefines():Void
 	{
 		if (!debug)
+		{
 			haxedefs.set("FLX_NO_DEBUG", "");
+			haxedefs.set("FLX_NO_FOCUS_LOST_SCREEN", "");
+		}
+
+		haxedefs.set("SHARK_VERSION", APP_VERSION);
+	}
+
+	function setupOptimizations():Void
+	{
+		if (!debug)
+		{
+			haxeflags.push("-dce full");
+			haxeflags.push("--no-traces");
+		}
 	}
 
 	function setupWindows():Void
@@ -105,12 +131,22 @@ class Build extends HXProject
 		window.fullscreen = true;
 		window.allowShaders = true;
 
+		architectures = [Architecture.ARMV7, Architecture.ARM64];
+
 		haxedefs.set("FLX_NO_NATIVE_CURSOR", "");
 
 		config.set("android.permissions", "android.permission.INTERNET android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE");
 		config.set("android.target-sdk-version", "35");
 		config.set("android.minimum-sdk-version", "21");
 		config.set("android.install-location", "auto");
+
+		if (!debug)
+			setupAndroidSigning();
+	}
+
+	function setupAndroidSigning():Void
+	{
+		certificate = new Certificate("Certificates/android.keystore", "android", "android", "android");
 	}
 
 	function setupIOS():Void
@@ -142,5 +178,11 @@ class Build extends HXProject
 		window.width = 1280;
 		window.height = 720;
 		window.resizable = true;
+	}
+
+	function resolveBuildNumber():String
+	{
+		var timestamp:Float = Date.now().getTime();
+		return Std.string(Std.int(timestamp / 1000));
 	}
 }
