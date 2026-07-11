@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project>
+
+	<meta title="Shark" package="com.brenninho.shark" version="0.1.0" company="Brenninho" />
+	<app main="Main" file="Shark" path="export" />
+
+	<window width="1280" height="720" fps="60" background="#000000" hardware="true" vsync="false" />
+	<window if="mobile" orientation="landscape" fullscreen="true" />
+	<window if="html5" resizable="true" />
+
+	<source path="source" />
+
+	<haxelib name="flixel" />
+	<haxelib name="flixel-addons" />
+	<haxelib name="flixel-ui" />
+
+	<assets path="assets" rename="assets" exclude="*.ogg|*.wav" if="web" />
+	<assets path="assets" rename="assets" exclude="*.mp3" unless="web" />
+
+	<icon path="assets/images/icon.png" />
+
+	<define name="FLX_NO_NATIVE_CURSOR" if="mobile" />
+	<define name="FLX_NO_DEBUG" unless="debug" />
+
+	<section if="debug">
+		<haxedef name="debug" />
+	</section>
+
+	<certificate if="android"
+		path="Certificates/android.keystore"
+		password="android"
+		alias="android"
+		alias-password="android" />
+
+	<config:android permissions="android.permission.INTERNET android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE" />
+	<config:android target-sdk-version="35" />
+	<config:android minimum-sdk-version="21" />
+	<config:android install-location="auto" />
+
+</project>
