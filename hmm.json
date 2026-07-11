@@ -1,0 +1,12 @@
+{
+	"dependencies": {
+		"lime": {
+			"type": "haxelib",
+			"version": "8.3.2"
+		},
+		"hxcpp": {
+			"type": "haxelib",
+			"version": "4.3.2"
+		}
+	}
+}
