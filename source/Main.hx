@@ -2,6 +2,7 @@ package;
 
 import flixel.FlxGame;
 import openfl.display.Sprite;
+import shark.active.PlayState;
 
 class Main extends Sprite
 {
