@@ -30,7 +30,7 @@ jobs:
         run: yes | sdkmanager --licenses || true
 
       - name: Install Android NDK
-        run: sdkmanager --install "ndk;25.2.9519653"
+        run: sdkmanager --install "ndk;21.4.7075529"
 
       - name: Setup Haxe
         uses: krdlab/setup-haxe@v1
@@ -57,7 +57,7 @@ jobs:
       - name: Configure Lime for Android
         run: |
           haxelib run lime config ANDROID_SDK "$ANDROID_SDK_ROOT"
-          haxelib run lime config ANDROID_NDK_ROOT "$ANDROID_SDK_ROOT/ndk/25.2.9519653"
+          haxelib run lime config ANDROID_NDK_ROOT "$ANDROID_SDK_ROOT/ndk/21.4.7075529"
           haxelib run lime config JAVA_HOME "$JAVA_HOME"
           haxelib run lime config ANDROID_SETUP true
 
