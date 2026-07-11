@@ -61,6 +61,19 @@ jobs:
           haxelib run lime config JAVA_HOME "$JAVA_HOME"
           haxelib run lime config ANDROID_SETUP true
 
+      - name: Generate Android keystore
+        run: |
+          mkdir -p Certificates
+          keytool -genkeypair -v \
+            -keystore Certificates/android.keystore \
+            -alias android \
+            -storepass android \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Shark, OU=Brenninho, O=Brenninho, L=Unknown, S=Unknown, C=BR"
+
       - name: Build Android
         run: haxelib run lime build android -final
 
