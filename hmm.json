@@ -22,8 +22,10 @@
 		},
 		{
 			"name": "flixel-ui",
-			"type": "haxelib",
-			"version": "2.5.0"
+			"type": "git",
+			"dir": null,
+			"ref": null,
+			"url": "https://github.com/HaxeFlixel/flixel-ui.git"
 		}
 	]
 }
