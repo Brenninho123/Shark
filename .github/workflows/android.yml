@@ -54,11 +54,15 @@ jobs:
       - name: Setup Lime
         run: haxelib run lime setup -y
 
+      - name: Configure Lime for Android
+        run: |
+          haxelib run lime config ANDROID_SDK "$ANDROID_SDK_ROOT"
+          haxelib run lime config ANDROID_NDK_ROOT "$ANDROID_SDK_ROOT/ndk/25.2.9519653"
+          haxelib run lime config JAVA_HOME "$JAVA_HOME"
+          haxelib run lime config ANDROID_SETUP true
+
       - name: Build Android
         run: haxelib run lime build android -final
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.2.9519653
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
