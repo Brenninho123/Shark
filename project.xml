@@ -13,6 +13,7 @@
 	<haxelib name="flixel" />
 	<haxelib name="flixel-addons" />
 	<haxelib name="flixel-ui" />
+	<haxelib name="hxcpp" if="cpp" />
 
 	<assets path="assets" rename="assets" exclude="*.ogg|*.wav" if="web" />
 	<assets path="assets" rename="assets" exclude="*.mp3" unless="web" />
@@ -36,5 +37,8 @@
 	<config:android target-sdk-version="35" />
 	<config:android minimum-sdk-version="21" />
 	<config:android install-location="auto" />
+
+	<config:ios deployment="12.0" />
+	<config:ios device="universal" />
 
 </project>
