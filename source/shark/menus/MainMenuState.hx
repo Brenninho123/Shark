@@ -9,7 +9,6 @@ import flixel.addons.ui.FlxInputText;
 import flixel.util.FlxColor;
 import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
-import flixel.math.FlxMath;
 import openfl.display.BitmapData;
 import shark.active.system.Head;
 import shark.online.Online;
@@ -172,7 +171,7 @@ class MainMenuState extends FlxState
 			blade.origin.set(4, height);
 			add(blade);
 
-			kelpBlades.push({sprite: blade, offset: Std.random(360) * FlxMath.TO_RAD, speed: 1 + Std.random(50) / 100});
+			kelpBlades.push({sprite: blade, offset: Std.random(6283) / 1000, speed: 1 + Std.random(50) / 100});
 		}
 	}
 
