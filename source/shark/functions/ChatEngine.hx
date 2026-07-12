@@ -5,6 +5,13 @@ import haxe.Json;
 import haxe.Timer;
 import openfl.display.BitmapData;
 import shark.functions.ImageCreator;
+import shark.online.Online;
+
+#if sys
+import sys.FileSystem;
+import sys.io.File;
+import lime.system.System;
+#end
 
 typedef ChatMessage = {role:String, content:String};
 
@@ -14,7 +21,8 @@ typedef ChatRequest = {
 	onError:String->Void,
 	?onImage:BitmapData->Void,
 	?onImageError:String->Void,
-	attempts:Int
+	attempts:Int,
+	token:Int
 }
 
 class ChatEngine
@@ -25,27 +33,59 @@ class ChatEngine
 	public static var maxRetries:Int = 2;
 	public static var maxHistory:Int = 40;
 	public static var minRequestInterval:Float = 0.6;
+	public static var maxMessageLength:Int = 4000;
+	public static var requireOnline:Bool = true;
 
 	static var history:Array<ChatMessage> = [];
 	static var queue:Array<ChatRequest> = [];
 	static var isBusy:Bool = false;
 	static var lastRequestTime:Float = 0;
+	static var currentToken:Int = 0;
 
 	static inline var IMAGE_TAG_START:String = "[[image:";
 	static inline var IMAGE_TAG_END:String = "]]";
+	static inline var HISTORY_FILENAME:String = "chat_history.json";
 
 	public static function send(message:String, onComplete:String->Void, onError:String->Void, ?onImage:BitmapData->Void, ?onImageError:String->Void):Void
 	{
+		var trimmed:String = StringTools.trim(message);
+
+		if (trimmed.length == 0)
+		{
+			onError("Message is empty");
+			return;
+		}
+
+		if (trimmed.length > maxMessageLength)
+		{
+			onError('Message exceeds $maxMessageLength characters');
+			return;
+		}
+
+		if (requireOnline && !Online.isOnline)
+		{
+			onError("No internet connection");
+			return;
+		}
+
 		queue.push({
-			message: message,
+			message: trimmed,
 			onComplete: onComplete,
 			onError: onError,
 			onImage: onImage,
 			onImageError: onImageError,
-			attempts: 0
+			attempts: 0,
+			token: currentToken
 		});
 
 		processQueue();
+	}
+
+	public static function cancelPending():Void
+	{
+		queue = [];
+		currentToken++;
+		isBusy = false;
 	}
 
 	static function processQueue():Void
@@ -87,8 +127,18 @@ class ChatEngine
 
 		http.setPostData(Json.stringify(payload));
 
+		var statusCode:Int = 0;
+
+		http.onStatus = function(status:Int):Void
+		{
+			statusCode = status;
+		};
+
 		http.onData = function(data:String):Void
 		{
+			if (request.token != currentToken)
+				return;
+
 			try
 			{
 				var response = Json.parse(data);
@@ -97,6 +147,8 @@ class ChatEngine
 				history.push({role: "user", content: request.message});
 				history.push({role: "assistant", content: reply});
 
+				saveHistory();
+
 				var cleanReply:String = extractAndTriggerImage(reply, request.onImage, request.onImageError);
 
 				request.onComplete(cleanReply);
@@ -104,23 +156,28 @@ class ChatEngine
 			}
 			catch (e:Dynamic)
 			{
-				handleFailure(request, Std.string(e));
+				handleFailure(request, Std.string(e), statusCode);
 			}
 		};
 
 		http.onError = function(msg:String):Void
 		{
-			handleFailure(request, msg);
+			if (request.token != currentToken)
+				return;
+
+			handleFailure(request, msg, statusCode);
 		};
 
 		http.request(true);
 	}
 
-	static function handleFailure(request:ChatRequest, message:String):Void
+	static function handleFailure(request:ChatRequest, message:String, statusCode:Int):Void
 	{
 		request.attempts++;
 
-		if (request.attempts <= maxRetries)
+		var isRetryable:Bool = statusCode != 401 && statusCode != 403 && statusCode != 400;
+
+		if (isRetryable && request.attempts <= maxRetries)
 		{
 			var backoff:Int = Std.int(Math.pow(2, request.attempts) * 500);
 
@@ -138,7 +195,9 @@ class ChatEngine
 
 	static function finishRequest(request:ChatRequest):Void
 	{
-		queue.shift();
+		if (queue.length > 0)
+			queue.shift();
+
 		isBusy = false;
 		processQueue();
 	}
@@ -175,5 +234,50 @@ class ChatEngine
 		history = [];
 		queue = [];
 		isBusy = false;
+		currentToken++;
+
+		saveHistory();
+	}
+
+	static function getHistoryPath():String
+	{
+		#if sys
+		var base:String = System.applicationStorageDirectory;
+
+		if (!StringTools.endsWith(base, "/") && !StringTools.endsWith(base, "\\"))
+			base += "/";
+
+		return base + HISTORY_FILENAME;
+		#else
+		return "";
+		#end
+	}
+
+	static function saveHistory():Void
+	{
+		#if sys
+		try
+		{
+			File.saveContent(getHistoryPath(), Json.stringify(history));
+		}
+		catch (e:Dynamic) {}
+		#end
+	}
+
+	public static function loadHistory():Void
+	{
+		#if sys
+		try
+		{
+			var path:String = getHistoryPath();
+
+			if (FileSystem.exists(path))
+				history = Json.parse(File.getContent(path));
+		}
+		catch (e:Dynamic)
+		{
+			history = [];
+		}
+		#end
 	}
 }
