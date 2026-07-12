@@ -10,6 +10,7 @@ import flixel.util.FlxColor;
 import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
 import openfl.display.BitmapData;
+import shark.active.GameState;
 import shark.active.system.Head;
 import shark.online.Online;
 
@@ -241,10 +242,25 @@ class MainMenuState extends FlxState
 
 	function sendMessage(message:String):Void
 	{
+		var trimmed:String = StringTools.trim(message);
+
+		if (trimmed.toLowerCase() == "!play")
+		{
+			appendToHistory("You: " + message);
+			inputField.text = "";
+			goToGameState();
+			return;
+		}
+
 		appendToHistory("You: " + message);
 		inputField.text = "";
 
 		Head.think(message, onReply, onError, onImageGenerated, onImageError);
+	}
+
+	function goToGameState():Void
+	{
+		FlxG.switchState(new GameState());
 	}
 
 	function onReply(reply:String):Void
