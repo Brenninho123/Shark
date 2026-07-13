@@ -4,34 +4,44 @@
 	<meta title="Shark" package="com.brenninho.shark" version="0.1.0" company="Brenninho" />
 	<app main="Main" file="Shark" path="export" />
 
-	<window width="1280" height="720" fps="60" background="#000000" hardware="true" vsync="false" />
-	<window if="mobile" orientation="landscape" fullscreen="true" />
-	<window if="html5" resizable="true" />
+	<window width="1280" height="720" fps="60" background="#00111F" hardware="true" vsync="false" antialiasing="0" />
+	<window if="mobile" orientation="landscape" fullscreen="true" allow-shaders="true" />
+	<window if="html5" resizable="true" allow-high-dpi="true" />
+	<window if="desktop" resizable="true" />
 
 	<source path="source" />
 
+	<haxelib name="openfl" />
 	<haxelib name="flixel" />
 	<haxelib name="flixel-addons" />
 	<haxelib name="flixel-ui" />
 	<haxelib name="hxcpp" if="cpp" />
 
-	<assets path="assets" rename="assets" exclude="*.ogg|*.wav" if="web" />
-	<assets path="assets" rename="assets" exclude="*.mp3" unless="web" />
+	<assets path="assets/images/icon.png" rename="assets/images/icon.png" />
 
 	<icon path="assets/images/icon.png" />
 
 	<define name="FLX_NO_NATIVE_CURSOR" if="mobile" />
 	<define name="FLX_NO_DEBUG" unless="debug" />
+	<define name="FLX_NO_FOCUS_LOST_SCREEN" unless="debug" />
+	<define name="FLX_NO_SOUND_TRAY" if="mobile" />
+
+	<haxeflag name="-dce full" unless="debug" />
+	<haxeflag name="--no-traces" unless="debug" />
 
 	<section if="debug">
 		<haxedef name="debug" />
 	</section>
 
 	<certificate if="android"
+		unless="debug"
 		path="Certificates/android.keystore"
 		password="android"
 		alias="android"
 		alias-password="android" />
+
+	<architecture name="armv7" if="android" />
+	<architecture name="arm64" if="android" />
 
 	<config:android permissions="android.permission.INTERNET android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE" />
 	<config:android target-sdk-version="35" />
@@ -40,5 +50,8 @@
 
 	<config:ios deployment="12.0" />
 	<config:ios device="universal" />
+	<config:ios extension="false" />
+
+	<config:html5 title="Shark" />
 
 </project>
