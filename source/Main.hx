@@ -2,6 +2,8 @@ package;
 
 import flixel.FlxG;
 import flixel.FlxGame;
+import flixel.text.FlxText;
+import flixel.util.FlxColor;
 import lime.manager.LimeManager;
 import lime.ui.KeyCode;
 import openfl.display.FPS;
@@ -12,12 +14,26 @@ import openfl.errors.Error;
 import openfl.events.Event;
 import openfl.events.KeyboardEvent;
 import openfl.events.UncaughtErrorEvent;
+import openfl.system.Capabilities;
+import shark.audio.Audio;
 import shark.menus.MainMenuState;
+
+#if sys
+import sys.io.File;
+import lime.system.System;
+#end
 
 class Main extends Sprite
 {
 	public static var lastError:String = "";
 	public static var isActive(default, null):Bool = true;
+	public static var systemLanguage(default, null):String = "en";
+
+	static inline var SAVE_NAME:String = "shark_save";
+	static inline var CRASH_LOG_FILENAME:String = "crash_log.txt";
+
+	var debugOverlay:FlxText;
+	var debugOverlayVisible:Bool = false;
 
 	public function new()
 	{
@@ -41,10 +57,13 @@ class Main extends Sprite
 		setupErrorHandling();
 		setupLifecycle();
 		setupInput();
+		setupLocale();
+		setupSave();
 
 		LimeManager.initialize();
 
 		setupGame();
+		setupDebugOverlay();
 
 		#if debug
 		addChild(new FPS(10, 10, 0xFFFFFF));
@@ -73,13 +92,32 @@ class Main extends Sprite
 	{
 		stage.addEventListener(Event.ACTIVATE, onActivate);
 		stage.addEventListener(Event.DEACTIVATE, onDeactivate);
+
+		#if sys
+		stage.addEventListener(Event.EXITING, onExiting);
+		#end
 	}
 
 	function setupInput():Void
 	{
-		#if android
 		stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
-		#end
+	}
+
+	function setupLocale():Void
+	{
+		var raw:String = Capabilities.language;
+		systemLanguage = raw != null && raw.length >= 2 ? raw.substr(0, 2).toLowerCase() : "en";
+	}
+
+	function setupSave():Void
+	{
+		FlxG.save.bind(SAVE_NAME);
+
+		if (FlxG.save.data.muted != null)
+			Audio.setMuted(FlxG.save.data.muted);
+
+		if (FlxG.save.data.musicVolume != null)
+			Audio.musicVolume = FlxG.save.data.musicVolume;
 	}
 
 	function setupGame():Void
@@ -96,6 +134,31 @@ class Main extends Sprite
 		#end
 	}
 
+	function setupDebugOverlay():Void
+	{
+		#if debug
+		debugOverlay = new FlxText(10, 30, 400, "");
+		debugOverlay.setFormat(null, 12, FlxColor.LIME, LEFT);
+		debugOverlay.visible = false;
+
+		if (FlxG.stage != null)
+			FlxG.signals.postUpdate.add(updateDebugOverlay);
+		#end
+	}
+
+	function updateDebugOverlay():Void
+	{
+		#if debug
+		if (!debugOverlayVisible || FlxG.state == null)
+			return;
+
+		if (debugOverlay.parent == null)
+			FlxG.state.add(debugOverlay);
+
+		debugOverlay.text = LimeManager.getPerformanceSummary();
+		#end
+	}
+
 	function onStageResize(e:Event):Void
 	{
 		if (FlxG.game != null)
@@ -108,6 +171,7 @@ class Main extends Sprite
 	function onActivate(e:Event):Void
 	{
 		isActive = true;
+		Audio.resumeMusic();
 
 		if (FlxG.sound != null)
 			FlxG.sound.resume();
@@ -116,9 +180,26 @@ class Main extends Sprite
 	function onDeactivate(e:Event):Void
 	{
 		isActive = false;
+		Audio.pauseMusic();
 
 		if (FlxG.sound != null)
 			FlxG.sound.pause();
+
+		flushSave();
+	}
+
+	#if sys
+	function onExiting(e:Event):Void
+	{
+		flushSave();
+	}
+	#end
+
+	function flushSave():Void
+	{
+		FlxG.save.data.muted = Audio.isMuted;
+		FlxG.save.data.musicVolume = Audio.musicVolume;
+		FlxG.save.flush();
 	}
 
 	function onKeyDown(e:KeyboardEvent):Void
@@ -128,6 +209,17 @@ class Main extends Sprite
 		{
 			e.preventDefault();
 			handleBackButton();
+			return;
+		}
+		#end
+
+		#if debug
+		if (e.keyCode == lime.ui.KeyCode.F3)
+		{
+			debugOverlayVisible = !debugOverlayVisible;
+
+			if (debugOverlay != null)
+				debugOverlay.visible = debugOverlayVisible;
 		}
 		#end
 	}
@@ -153,5 +245,26 @@ class Main extends Sprite
 			lastError = cast(e.error, String);
 		else
 			lastError = "Unknown error";
+
+		logCrash(lastError);
+	}
+
+	function logCrash(message:String):Void
+	{
+		#if sys
+		try
+		{
+			var base:String = System.applicationStorageDirectory;
+
+			if (!StringTools.endsWith(base, "/") && !StringTools.endsWith(base, "\\"))
+				base += "/";
+
+			var line:String = '${Date.now()} | ${LimeManager.getBuildSummary()} | $message\n';
+			var output = File.append(base + CRASH_LOG_FILENAME, false);
+			output.writeString(line);
+			output.close();
+		}
+		catch (e:Dynamic) {}
+		#end
 	}
 }
