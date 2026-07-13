@@ -1,6 +1,11 @@
 {
 	"dependencies": [
 		{
+			"name": "openfl",
+			"type": "haxelib",
+			"version": "9.5.2"
+		},
+		{
 			"name": "lime",
 			"type": "haxelib",
 			"version": "8.3.2"
