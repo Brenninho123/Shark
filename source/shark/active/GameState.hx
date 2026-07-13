@@ -7,6 +7,9 @@ import flixel.text.FlxText;
 import flixel.ui.FlxButton;
 import flixel.util.FlxColor;
 import flixel.group.FlxGroup.FlxTypedGroup;
+import shark.active.games.BubblePopState;
+import shark.active.games.ReefRunnerState;
+import shark.active.games.DeepDiveState;
 import shark.menus.MainMenuState;
 
 typedef GameEntry = {
@@ -25,9 +28,9 @@ class GameState extends FlxState
 	static inline var COLOR_FOAM:FlxColor = 0xFFE0FBFC;
 
 	var games:Array<GameEntry> = [
-		{id: "bubble_pop", title: "Bubble Pop", description: "Pop rising bubbles before they escape."},
-		{id: "reef_runner", title: "Reef Runner", description: "Dodge obstacles swimming through the reef."},
-		{id: "deep_dive", title: "Deep Dive", description: "See how far you can dive before running out of air."}
+		{id: "bubble_pop", title: "Bubble Pop", description: "Pop rising bubbles before they escape.", stateClass: BubblePopState},
+		{id: "reef_runner", title: "Reef Runner", description: "Dodge obstacles swimming through the reef.", stateClass: ReefRunnerState},
+		{id: "deep_dive", title: "Deep Dive", description: "See how far you can dive before hitting a rock.", stateClass: DeepDiveState}
 	];
 
 	var buttonGroup:FlxTypedGroup<FlxButton>;
