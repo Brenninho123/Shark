@@ -13,6 +13,10 @@ jobs:
   build-ios:
     runs-on: macos-13
     timeout-minutes: 45
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_ENV_HINTS: 1
 
     steps:
       - name: Checkout repository
@@ -20,7 +24,7 @@ jobs:
         timeout-minutes: 5
 
       - name: Setup Haxe
-        uses: krdlab/setup-haxe@v1
+        uses: krdlab/setup-haxe@v2
         with:
           haxe-version: 4.3.7
         timeout-minutes: 10
