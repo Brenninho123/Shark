@@ -229,6 +229,11 @@ class ChatEngine
 		return StringTools.trim(cleanReply);
 	}
 
+	public static function getHistory():Array<ChatMessage>
+	{
+		return history.copy();
+	}
+
 	public static function reset():Void
 	{
 		history = [];
