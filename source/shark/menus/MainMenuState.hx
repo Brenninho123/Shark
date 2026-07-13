@@ -12,6 +12,9 @@ import flixel.tweens.FlxEase;
 import openfl.display.BitmapData;
 import shark.active.GameState;
 import shark.active.system.Head;
+import shark.audio.Audio;
+import shark.backend.Paths;
+import shark.functions.ChatEngine;
 import shark.online.Online;
 
 class MainMenuState extends FlxState
@@ -30,6 +33,8 @@ class MainMenuState extends FlxState
 	var historyText:FlxText;
 	var titleText:FlxText;
 	var sendButton:FlxButton;
+	var muteButton:FlxButton;
+	var newChatButton:FlxButton;
 	var statusDot:FlxSprite;
 	var statusText:FlxText;
 	var thinkingText:FlxText;
@@ -38,6 +43,7 @@ class MainMenuState extends FlxState
 	var bubbles:Array<FlxSprite> = [];
 	var lightRays:Array<FlxSprite> = [];
 	var kelpBlades:Array<{sprite:FlxSprite, offset:Float, speed:Float}> = [];
+	var imageSprites:Array<FlxSprite> = [];
 
 	var conversation:Array<String> = [];
 	var isMobile:Bool;
@@ -98,10 +104,40 @@ class MainMenuState extends FlxState
 		sendButton.label.color = COLOR_FOAM;
 		add(sendButton);
 
+		muteButton = new FlxButton(20, 12, Audio.isMuted ? "Unmute" : "Mute", onMutePressed);
+		muteButton.setSize(isMobile ? 90 : 70, isMobile ? 40 : 26);
+		muteButton.color = COLOR_MID;
+		muteButton.label.color = COLOR_FOAM;
+		add(muteButton);
+
+		newChatButton = new FlxButton(muteButton.x + muteButton.width + 10, 12, "New Chat", onNewChatPressed);
+		newChatButton.setSize(isMobile ? 120 : 90, isMobile ? 40 : 26);
+		newChatButton.color = COLOR_MID;
+		newChatButton.label.color = COLOR_FOAM;
+		add(newChatButton);
+
 		Online.onStatusChanged = onOnlineStatusChanged;
 		Online.start();
 
 		Head.onThinkingChanged = onThinkingChanged;
+
+		restoreHistory();
+
+		if (Paths.exists(Paths.music("ocean_ambient")))
+			Audio.playMusic("ocean_ambient");
+	}
+
+	function restoreHistory():Void
+	{
+		ChatEngine.loadHistory();
+
+		for (entry in ChatEngine.getHistory())
+		{
+			var speaker:String = entry.role == "user" ? "You" : "Shark";
+			conversation.push('$speaker: ${entry.content}');
+		}
+
+		historyText.text = conversation.join("\n");
 	}
 
 	function createDepthGradient():Void
@@ -254,6 +290,9 @@ class MainMenuState extends FlxState
 
 		appendToHistory("You: " + message);
 		inputField.text = "";
+		Audio.play("message_send");
+
+		sendButton.alive = false;
 
 		Head.think(message, onReply, onError, onImageGenerated, onImageError);
 	}
@@ -266,11 +305,14 @@ class MainMenuState extends FlxState
 	function onReply(reply:String):Void
 	{
 		appendToHistory("Shark: " + reply);
+		Audio.play("message_receive");
+		sendButton.alive = Online.isOnline;
 	}
 
 	function onError(error:String):Void
 	{
 		appendToHistory("Error: " + error);
+		sendButton.alive = Online.isOnline;
 	}
 
 	function onImageGenerated(bitmap:BitmapData):Void
@@ -278,8 +320,10 @@ class MainMenuState extends FlxState
 		var sprite = new FlxSprite(FlxG.width - bitmap.width - 20, 110);
 		sprite.pixels = bitmap;
 		add(sprite);
+		imageSprites.push(sprite);
 
 		appendToHistory("Shark: [image generated]");
+		Audio.play("message_receive");
 	}
 
 	function onImageError(error:String):Void
@@ -287,12 +331,31 @@ class MainMenuState extends FlxState
 		appendToHistory("Error generating image: " + error);
 	}
 
+	function onMutePressed():Void
+	{
+		var muted:Bool = Audio.toggleMute();
+		muteButton.text = muted ? "Unmute" : "Mute";
+	}
+
+	function onNewChatPressed():Void
+	{
+		Head.reset();
+
+		conversation = [];
+		historyText.text = "";
+
+		for (sprite in imageSprites)
+			remove(sprite, true);
+
+		imageSprites = [];
+	}
+
 	function onOnlineStatusChanged(online:Bool):Void
 	{
 		statusDot.color = online ? COLOR_ONLINE : COLOR_OFFLINE;
 		statusText.color = online ? COLOR_ONLINE : COLOR_OFFLINE;
 		statusText.text = online ? "online" : "offline";
-		sendButton.alive = online;
+		sendButton.alive = online && !Head.isThinking;
 	}
 
 	function onThinkingChanged(thinking:Bool):Void
