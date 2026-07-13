@@ -12,18 +12,22 @@ on:
 jobs:
   build-ios:
     runs-on: macos-13
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        timeout-minutes: 5
 
       - name: Setup Haxe
         uses: krdlab/setup-haxe@v1
         with:
           haxe-version: 4.3.7
+        timeout-minutes: 10
 
       - name: Install hmm
         run: haxelib install hmm
+        timeout-minutes: 5
 
       - name: Cache haxelib dependencies
         uses: actions/cache@v4
@@ -35,18 +39,52 @@ jobs:
 
       - name: Install dependencies
         run: haxelib run hmm install
+        timeout-minutes: 10
 
       - name: Setup Lime
         run: haxelib run lime setup -y
+        timeout-minutes: 5
+
+      - name: List available Xcode versions
+        run: ls /Applications | grep Xcode
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+        run: |
+          if [ -d "/Applications/Xcode_15.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_15.2.app
+          else
+            sudo xcode-select -s /Applications/Xcode.app
+          fi
+          xcodebuild -version
+
+      - name: Clean derived data
+        run: rm -rf ~/Library/Developer/Xcode/DerivedData
+
+      - name: List available simulators
+        run: xcrun simctl list devices available
 
       - name: Build iOS (simulator)
-        run: haxelib run lime build ios -simulator -final
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          attempt=1
+          max_attempts=2
+
+          until haxelib run lime build ios -simulator -final; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Build failed after $max_attempts attempts"
+              exit 1
+            fi
+
+            echo "Build attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+            rm -rf export/ios/build
+          done
 
       - name: Upload artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Shark-iOS-Simulator
           path: export/ios/build/Release-iphonesimulator
+          retention-days: 7
