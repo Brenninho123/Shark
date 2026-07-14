@@ -1,6 +1,5 @@
 package shark.functions;
 
-import haxe.Http;
 import haxe.Json;
 import haxe.Timer;
 import haxe.crypto.Base64;
@@ -11,7 +10,10 @@ import openfl.events.Event;
 import openfl.events.IOErrorEvent;
 import openfl.utils.ByteArray;
 import shark.mobile.StorageUtil;
+import shark.online.Network;
+import shark.online.NetworkResponse;
 import shark.online.Online;
+import shark.ui.security.Guard;
 
 typedef ImageRequest = {
 	prompt:String,
@@ -19,7 +21,6 @@ typedef ImageRequest = {
 	onError:String->Void,
 	width:Int,
 	height:Int,
-	attempts:Int,
 	token:Int
 }
 
@@ -78,7 +79,6 @@ class ImageCreator
 			onError: onError,
 			width: width,
 			height: height,
-			attempts: 0,
 			token: currentToken
 		});
 
@@ -119,36 +119,33 @@ class ImageCreator
 	{
 		lastRequestTime = Timer.stamp();
 
-		var http = new Http(endpoint);
-		http.setHeader("Content-Type", "application/json");
-
-		if (apiKey != "")
-			http.setHeader("Authorization", 'Bearer $apiKey');
-
 		var payload = {
 			prompt: request.prompt,
 			width: request.width,
 			height: request.height
 		};
 
-		http.setPostData(Json.stringify(payload));
+		var headers:Map<String, String> = new Map();
 
-		var statusCode:Int = 0;
+		if (apiKey != "")
+			headers.set("Authorization", 'Bearer $apiKey');
 
-		http.onStatus = function(status:Int):Void
-		{
-			statusCode = status;
-		};
-
-		http.onData = function(data:String):Void
+		Network.postJson(endpoint, payload, headers, function(response:NetworkResponse):Void
 		{
 			if (request.token != currentToken)
 				return;
 
+			if (!response.success)
+			{
+				request.onError(response.error);
+				finishRequest(request);
+				return;
+			}
+
 			try
 			{
-				var response = Json.parse(data);
-				var base64Image:String = response.image;
+				var parsed = Json.parse(response.data);
+				var base64Image:String = parsed.image;
 
 				decodeBase64Image(base64Image, function(bitmap:BitmapData):Void
 				{
@@ -165,46 +162,16 @@ class ImageCreator
 					finishRequest(request);
 				}, function(error:String):Void
 				{
-					handleFailure(request, error, statusCode);
+					request.onError(error);
+					finishRequest(request);
 				});
 			}
 			catch (e:Dynamic)
 			{
-				handleFailure(request, Std.string(e), statusCode);
+				request.onError(Std.string(e));
+				finishRequest(request);
 			}
-		};
-
-		http.onError = function(msg:String):Void
-		{
-			if (request.token != currentToken)
-				return;
-
-			handleFailure(request, msg, statusCode);
-		};
-
-		http.request(true);
-	}
-
-	static function handleFailure(request:ImageRequest, message:String, statusCode:Int):Void
-	{
-		request.attempts++;
-
-		var isRetryable:Bool = statusCode != 401 && statusCode != 403 && statusCode != 400;
-
-		if (isRetryable && request.attempts <= maxRetries)
-		{
-			var backoff:Int = Std.int(Math.pow(2, request.attempts) * 700);
-
-			Timer.delay(function():Void
-			{
-				executeRequest(request);
-			}, backoff);
-		}
-		else
-		{
-			request.onError(message);
-			finishRequest(request);
-		}
+		}, null, maxRetries);
 	}
 
 	static function finishRequest(request:ImageRequest):Void
@@ -233,6 +200,12 @@ class ImageCreator
 		catch (e:Dynamic)
 		{
 			onError("Invalid image data received");
+			return;
+		}
+
+		if (!Guard.isValidImagePayload(bytes))
+		{
+			onError("Image data failed integrity check");
 			return;
 		}
 
