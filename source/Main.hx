@@ -15,11 +15,13 @@ import openfl.events.Event;
 import openfl.events.KeyboardEvent;
 import openfl.events.UncaughtErrorEvent;
 import openfl.system.Capabilities;
+import shark.active.system.Head;
 import shark.audio.Audio;
 import shark.functions.ChatEngine;
 import shark.functions.ImageCreator;
 import shark.menus.MainMenuState;
 import shark.online.Online;
+import shark.online.manager.Internet;
 import shark.ui.security.Guard;
 
 #if sys
@@ -71,6 +73,8 @@ class Main extends Sprite
 		setupLocale();
 		setupSave();
 		setupSecurity();
+		setupConnectivity();
+		setupHeadSignals();
 
 		LimeManager.initialize();
 
@@ -149,6 +153,24 @@ class Main extends Sprite
 			ImageCreator.endpoint = "";
 			logSecurityEvent("Blocked untrusted ImageCreator endpoint");
 		}
+	}
+
+	function setupConnectivity():Void
+	{
+		Internet.initialize();
+	}
+
+	function setupHeadSignals():Void
+	{
+		Head.onFlaggedInput = function(input:String):Void
+		{
+			logSecurityEvent("Flagged input (possible prompt injection)");
+		};
+
+		Head.onRateLimited = function():Void
+		{
+			logSecurityEvent("Rate limit triggered");
+		};
 	}
 
 	function setupGame():Void
