@@ -8,6 +8,7 @@ import lime.tools.AssetType;
 import lime.tools.Haxelib;
 import lime.tools.Icon;
 import lime.tools.Certificate;
+import lime.crossplataform.Windows;
 
 class Build extends HXProject
 {
@@ -120,9 +121,7 @@ class Build extends HXProject
 
 	function setupWindows():Void
 	{
-		window.width = 1280;
-		window.height = 720;
-		window.resizable = true;
+		Windows.configure(this);
 	}
 
 	function setupAndroid():Void
