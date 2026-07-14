@@ -163,6 +163,33 @@ class Paths
 		return content;
 	}
 
+	public static function getJson(key:String):Dynamic
+	{
+		var raw:String = getText(key, "json");
+
+		if (raw == null)
+			return null;
+
+		try
+		{
+			return haxe.Json.parse(raw);
+		}
+		catch (e:Dynamic)
+		{
+			return null;
+		}
+	}
+
+	public static function dataExists(key:String):Bool
+	{
+		return Assets.exists(data(key));
+	}
+
+	public static function invalidateText(key:String, extension:String = "json"):Void
+	{
+		textCache.remove('$key.$extension');
+	}
+
 	public static function exists(path:String):Bool
 	{
 		return Assets.exists(path);
