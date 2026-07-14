@@ -148,7 +148,7 @@ class Main extends Sprite
 
 		if (raw == null)
 		{
-			logSecurityEvent("No network config found (assets/data/config.json)");
+			logSecurityEvent("No app config found (assets/data/config.json)");
 			return;
 		}
 
@@ -156,24 +156,140 @@ class Main extends Sprite
 		{
 			var parsed = Json.parse(raw);
 
-			if (parsed.chatEndpoint != null)
-				ChatEngine.endpoint = parsed.chatEndpoint;
-
-			if (parsed.chatApiKey != null)
-				ChatEngine.apiKey = parsed.chatApiKey;
-
-			if (parsed.imageEndpoint != null)
-				ImageCreator.endpoint = parsed.imageEndpoint;
-
-			if (parsed.imageApiKey != null)
-				ImageCreator.apiKey = parsed.imageApiKey;
+			applyNetworkSection(parsed.network);
+			applyChatSection(parsed.chat);
+			applyImageSection(parsed.image);
+			applyAudioSection(parsed.audio);
+			applySecuritySection(parsed.security);
+			applyConnectivitySection(parsed.connectivity);
+			applyAppSection(parsed.app);
 
 			isNetworkConfigLoaded = true;
 		}
 		catch (e:Dynamic)
 		{
-			logSecurityEvent("Failed to parse network config");
+			logSecurityEvent("Failed to parse app config");
 		}
+	}
+
+	function applyNetworkSection(section:Dynamic):Void
+	{
+		if (section == null)
+			return;
+
+		if (section.chatEndpoint != null)
+			ChatEngine.endpoint = section.chatEndpoint;
+
+		if (section.chatApiKey != null)
+			ChatEngine.apiKey = section.chatApiKey;
+
+		if (section.imageEndpoint != null)
+			ImageCreator.endpoint = section.imageEndpoint;
+
+		if (section.imageApiKey != null)
+			ImageCreator.apiKey = section.imageApiKey;
+
+		if (section.requireOnline != null)
+		{
+			ChatEngine.requireOnline = section.requireOnline;
+			ImageCreator.requireOnline = section.requireOnline;
+		}
+	}
+
+	function applyChatSection(section:Dynamic):Void
+	{
+		if (section == null)
+			return;
+
+		if (section.systemPrompt != null)
+			ChatEngine.systemPrompt = section.systemPrompt;
+
+		if (section.maxHistory != null)
+			ChatEngine.maxHistory = section.maxHistory;
+
+		if (section.maxMessageLength != null)
+			ChatEngine.maxMessageLength = section.maxMessageLength;
+
+		if (section.minRequestInterval != null)
+			ChatEngine.minRequestInterval = section.minRequestInterval;
+
+		if (section.maxRetries != null)
+			ChatEngine.maxRetries = section.maxRetries;
+	}
+
+	function applyImageSection(section:Dynamic):Void
+	{
+		if (section == null)
+			return;
+
+		if (section.maxPromptLength != null)
+			ImageCreator.maxPromptLength = section.maxPromptLength;
+
+		if (section.minRequestInterval != null)
+			ImageCreator.minRequestInterval = section.minRequestInterval;
+
+		if (section.maxRetries != null)
+			ImageCreator.maxRetries = section.maxRetries;
+
+		if (section.cacheEnabled != null)
+			ImageCreator.cacheEnabled = section.cacheEnabled;
+
+		if (section.autoSaveToStorage != null)
+			ImageCreator.autoSaveToStorage = section.autoSaveToStorage;
+	}
+
+	function applyAudioSection(section:Dynamic):Void
+	{
+		if (section == null)
+			return;
+
+		if (section.musicVolume != null && FlxG.save.data.musicVolume == null)
+			Audio.musicVolume = section.musicVolume;
+
+		if (section.soundVolume != null)
+			Audio.soundVolume = section.soundVolume;
+
+		if (section.startMuted != null && FlxG.save.data.muted == null)
+			Audio.setMuted(section.startMuted);
+	}
+
+	function applySecuritySection(section:Dynamic):Void
+	{
+		if (section == null)
+			return;
+
+		if (section.maxInputLength != null)
+			Guard.maxInputLength = section.maxInputLength;
+
+		if (section.maxRequestsPerWindow != null)
+			Guard.maxRequestsPerWindow = section.maxRequestsPerWindow;
+
+		if (section.rateLimitWindowSeconds != null)
+			Guard.rateLimitWindowSeconds = section.rateLimitWindowSeconds;
+	}
+
+	function applyConnectivitySection(section:Dynamic):Void
+	{
+		if (section == null)
+			return;
+
+		if (section.onlineCheckInterval != null)
+			Online.onlineCheckInterval = section.onlineCheckInterval;
+
+		if (section.offlineCheckInterval != null)
+			Online.offlineCheckInterval = section.offlineCheckInterval;
+
+		if (section.checkTimeoutMs != null)
+			Online.checkTimeoutMs = section.checkTimeoutMs;
+	}
+
+	function applyAppSection(section:Dynamic):Void
+	{
+		if (section == null)
+			return;
+
+		if (section.buildVersion != null)
+			LimeManager.buildVersion = section.buildVersion;
 	}
 
 	function setupSecurity():Void
