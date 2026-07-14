@@ -9,6 +9,7 @@ import lime.tools.Haxelib;
 import lime.tools.Icon;
 import lime.tools.Certificate;
 import lime.crossplataform.Windows;
+import lime.crossplataform.mobile.Android;
 
 class Build extends HXProject
 {
@@ -126,26 +127,7 @@ class Build extends HXProject
 
 	function setupAndroid():Void
 	{
-		window.orientation = LANDSCAPE;
-		window.fullscreen = true;
-		window.allowShaders = true;
-
-		architectures = [Architecture.ARMV7, Architecture.ARM64];
-
-		haxedefs.set("FLX_NO_NATIVE_CURSOR", "");
-
-		config.set("android.permissions", "android.permission.INTERNET android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE");
-		config.set("android.target-sdk-version", "35");
-		config.set("android.minimum-sdk-version", "21");
-		config.set("android.install-location", "auto");
-
-		if (!debug)
-			setupAndroidSigning();
-	}
-
-	function setupAndroidSigning():Void
-	{
-		certificate = new Certificate("Certificates/android.keystore", "android", "android", "android");
+		Android.configure(this);
 	}
 
 	function setupIOS():Void
