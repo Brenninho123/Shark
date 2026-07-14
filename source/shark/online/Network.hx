@@ -15,37 +15,41 @@ class Network
 	static var activeRequests:Map<Int, Bool> = new Map();
 	static var nextRequestId:Int = 0;
 
-	public static function request(url:String, method:String, ?headers:Map<String, String>, ?body:String, onComplete:NetworkResponse->Void, ?timeoutMs:Int,
+	public static function get(url:String, ?headers:Map<String, String>, ?onComplete:NetworkResponse->Void, ?timeoutMs:Int):Int
+	{
+		return request(url, "GET", headers, null, onComplete, timeoutMs, 0);
+	}
+
+	public static function postJson(url:String, payload:Dynamic, ?headers:Map<String, String>, ?onComplete:NetworkResponse->Void, ?timeoutMs:Int,
 			?retries:Int):Int
 	{
-		var id:Int = nextRequestId++;
-		activeRequests.set(id, true);
+		var mergedHeaders:Map<String, String> = headers != null ? headers : new Map();
+		mergedHeaders.set("Content-Type", "application/json");
 
-		var resolvedTimeout:Int = timeoutMs != null ? timeoutMs : adaptiveTimeout();
+		var body:String = Json.stringify(payload);
+
+		return request(url, "POST", mergedHeaders, body, onComplete, timeoutMs, retries);
+	}
+
+	public static function request(url:String, method:String, ?headers:Map<String, String>, ?body:String, ?onComplete:NetworkResponse->Void,
+			?timeoutMs:Int, ?retries:Int):Int
+	{
+		var requestId:Int = nextRequestId;
+		nextRequestId = nextRequestId + 1;
+
+		activeRequests.set(requestId, true);
+
+		var resolvedTimeout:Int = timeoutMs != null ? timeoutMs : resolveAdaptiveTimeout();
 		var resolvedRetries:Int = retries != null ? retries : defaultRetries;
 
-		attempt(id, url, method, headers, body, onComplete, resolvedTimeout, resolvedRetries, 0);
+		runAttempt(requestId, url, method, headers, body, onComplete, resolvedTimeout, resolvedRetries, 0);
 
-		return id;
+		return requestId;
 	}
 
-	public static function get(url:String, ?headers:Map<String, String>, onComplete:NetworkResponse->Void, ?timeoutMs:Int):Int
+	public static function cancel(requestId:Int):Void
 	{
-		return request(url, "GET", headers, null, onComplete, timeoutMs, 0);
-	}
-
-	public static function postJson(url:String, payload:Dynamic, ?headers:Map<String, String>, onComplete:NetworkResponse->Void, ?timeoutMs:Int,
-			?retries:Int):Int
-	{
-		var resolvedHeaders:Map<String, String> = headers != null ? headers : new Map();
-		resolvedHeaders.set("Content-Type", "application/json");
-
-		return request(url, "POST", resolvedHeaders, Json.stringify(payload), onComplete, timeoutMs, retries);
-	}
-
-	public static function cancel(id:Int):Void
-	{
-		activeRequests.remove(id);
+		activeRequests.remove(requestId);
 	}
 
 	public static function cancelAll():Void
@@ -53,220 +57,120 @@ class Network
 		activeRequests = new Map();
 	}
 
-	static function adaptiveTimeout():Int
+	static function resolveAdaptiveTimeout():Int
 	{
-		if (Internet.latencyMs > slowLatencyThresholdMs)
+		var latency:Float = Internet.latencyMs;
+
+		if (latency > slowLatencyThresholdMs)
 			return defaultTimeoutMs * 2;
 
 		return defaultTimeoutMs;
 	}
 
-	static function attempt(id:Int, url:String, method:String, ?headers:Map<String, String>, ?body:String, onComplete:NetworkResponse->Void, timeoutMs:Int,
-			retries:Int, attemptNumber:Int):Void
+	static function isStillActive(requestId:Int):Bool
 	{
-		if (!activeRequests.exists(id))
-			return;
-
-		var http = new Http(url);
-
-		if (headers != null)
-			for (key in headers.keys())
-				http.setHeader(key, headers.get(key));
-
-		var statusCode:Int = 0;
-		var finished:Bool = false;
-
-		http.onStatus = function(status:Int):Void
-		{
-			statusCode = status;
-		};
-
-		var timeoutTimer = Timer.delay(function():Void
-		{
-			if (finished)
-				return;
-
-			finished = true;
-			retryOrFail(id, url, method, headers, body, onComplete, timeoutMs, retries, attemptNumber, statusCode, "Request timed out");
-		}, timeoutMs);
-
-		http.onData = function(data:String):Void
-		{
-			if (finished)
-				return;
-
-			finished = true;
-			timeoutTimer.stop();
-			activeRequests.remove(id);
-
-			onComplete({success: true, status: statusCode, data: data});
-		};
-
-		http.onError = function(msg:String):Void
-		{
-			if (finished)
-				return;
-
-			finished = true;
-			timeoutTimer.stop();
-			retryOrFail(id, url, method, headers, body, onComplete, timeoutMs, retries, attemptNumber, statusCode, msg);
-		};
-
-		if (method == "POST")
-		{
-			if (body != null)
-				http.setPostData(body);
-
-			http.request(true);
-		}
-		else
-		{
-			http.request(false);
-		}
+		return activeRequests.exists(requestId);
 	}
 
-	static function retryOrFail(id:Int, url:String, method:String, ?headers:Map<String, String>, ?body:String, onComplete:NetworkResponse->Void,
-			timeoutMs:Int, retries:Int, attemptNumber:Int, statusCode:Int, errorMessage:String):Void
+	static function runAttempt(requestId:Int, url:String, method:String, headers:Map<String, String>, body:String, onComplete:NetworkResponse->Void,
+			timeoutMs:Int, retries:Int, attemptNumber:Int):Void
 	{
-		if (!activeRequests.exists(id))
+		if (!isStillActive(requestId))
 			return;
 
-		var isRetryable:Bool = statusCode != 400 && statusCode != 401 && statusCode != 403;
+		var httpRequest:Http = new Http(url);
+		attachHeaders(httpRequest, headers);
+
+		var state = {
+			statusCode: 0,
+			finished: false
+		};
+
+		httpRequest.onStatus = function(status:Int):Void
+		{
+			state.statusCode = status;
+		};
+
+		var timeoutHandle:Timer = Timer.delay(function():Void
+		{
+			finishAttempt(state, requestId, url, method, headers, body, onComplete, timeoutMs, retries, attemptNumber, "Request timed out");
+		}, timeoutMs);
+
+		httpRequest.onData = function(responseData:String):Void
+		{
+			if (state.finished)
+				return;
+
+			state.finished = true;
+			timeoutHandle.stop();
+			activeRequests.remove(requestId);
+
+			if (onComplete != null)
+				onComplete({success: true, status: state.statusCode, data: responseData});
+		};
+
+		httpRequest.onError = function(errorMessage:String):Void
+		{
+			finishAttempt(state, requestId, url, method, headers, body, onComplete, timeoutMs, retries, attemptNumber, errorMessage, timeoutHandle);
+		};
+
+		sendRequest(httpRequest, method, body);
+	}
+
+	static function finishAttempt(state:{statusCode:Int, finished:Bool}, requestId:Int, url:String, method:String, headers:Map<String, String>,
+			body:String, onComplete:NetworkResponse->Void, timeoutMs:Int, retries:Int, attemptNumber:Int, errorMessage:String, ?timeoutHandle:Timer):Void
+	{
+		if (state.finished)
+			return;
+
+		state.finished = true;
+
+		if (timeoutHandle != null)
+			timeoutHandle.stop();
+
+		if (!isStillActive(requestId))
+			return;
+
+		var isRetryable:Bool = state.statusCode != 400 && state.statusCode != 401 && state.statusCode != 403;
 
 		if (isRetryable && attemptNumber < retries)
 		{
-			var backoff:Int = Std.int(Math.pow(2, attemptNumber + 1) * 500);
+			var backoffMs:Int = Std.int(Math.pow(2, attemptNumber + 1) * 500);
 
 			Timer.delay(function():Void
 			{
-				attempt(id, url, method, headers, body, onComplete, timeoutMs, retries, attemptNumber + 1);
-			}, backoff);
+				runAttempt(requestId, url, method, headers, body, onComplete, timeoutMs, retries, attemptNumber + 1);
+			}, backoffMs);
 
 			return;
 		}
 
-		activeRequests.remove(id);
-		onComplete({success: false, status: statusCode, data: "", error: errorMessage});
-	}
-}
+		activeRequests.remove(requestId);
 
-	public static function get(url:String, ?headers:Map<String, String>, onComplete:NetworkResponse->Void, ?timeoutMs:Int):Int
-	{
-		return request(url, "GET", headers, null, onComplete, timeoutMs, 0);
+		if (onComplete != null)
+			onComplete({success: false, status: state.statusCode, data: "", error: errorMessage});
 	}
 
-	public static function postJson(url:String, payload:Dynamic, ?headers:Map<String, String>, onComplete:NetworkResponse->Void, ?timeoutMs:Int,
-			?retries:Int):Int
+	static function attachHeaders(httpRequest:Http, headers:Map<String, String>):Void
 	{
-		var resolvedHeaders:Map<String, String> = headers != null ? headers : new Map();
-		resolvedHeaders.set("Content-Type", "application/json");
-
-		return request(url, "POST", resolvedHeaders, Json.stringify(payload), onComplete, timeoutMs, retries);
-	}
-
-	public static function cancel(id:Int):Void
-	{
-		activeRequests.remove(id);
-	}
-
-	public static function cancelAll():Void
-	{
-		activeRequests = new Map();
-	}
-
-	static function adaptiveTimeout():Int
-	{
-		if (Internet.latencyMs > slowLatencyThresholdMs)
-			return defaultTimeoutMs * 2;
-
-		return defaultTimeoutMs;
-	}
-
-	static function attempt(id:Int, url:String, method:String, ?headers:Map<String, String>, ?body:String, onComplete:NetworkResponse->Void, timeoutMs:Int,
-			retries:Int, attemptNumber:Int):Void
-	{
-		if (!activeRequests.exists(id))
+		if (headers == null)
 			return;
 
-		var http = new Http(url);
+		for (headerName in headers.keys())
+			httpRequest.setHeader(headerName, headers.get(headerName));
+	}
 
-		if (headers != null)
-			for (key in headers.keys())
-				http.setHeader(key, headers.get(key));
-
-		var statusCode:Int = 0;
-		var finished:Bool = false;
-
-		http.onStatus = function(status:Int):Void
-		{
-			statusCode = status;
-		};
-
-		var timeoutTimer = Timer.delay(function():Void
-		{
-			if (finished)
-				return;
-
-			finished = true;
-			retryOrFail(id, url, method, headers, body, onComplete, timeoutMs, retries, attemptNumber, statusCode, "Request timed out");
-		}, timeoutMs);
-
-		http.onData = function(data:String):Void
-		{
-			if (finished)
-				return;
-
-			finished = true;
-			timeoutTimer.stop();
-			activeRequests.remove(id);
-
-			onComplete({success: true, status: statusCode, data: data});
-		};
-
-		http.onError = function(msg:String):Void
-		{
-			if (finished)
-				return;
-
-			finished = true;
-			timeoutTimer.stop();
-			retryOrFail(id, url, method, headers, body, onComplete, timeoutMs, retries, attemptNumber, statusCode, msg);
-		};
-
+	static function sendRequest(httpRequest:Http, method:String, body:String):Void
+	{
 		if (method == "POST")
 		{
 			if (body != null)
-				http.setPostData(body);
+				httpRequest.setPostData(body);
 
-			http.request(true);
-		}
-		else
-		{
-			http.request(false);
-		}
-	}
-
-	static function retryOrFail(id:Int, url:String, method:String, ?headers:Map<String, String>, ?body:String, onComplete:NetworkResponse->Void,
-			timeoutMs:Int, retries:Int, attemptNumber:Int, statusCode:Int, errorMessage:String):Void
-	{
-		if (!activeRequests.exists(id))
-			return;
-
-		var isRetryable:Bool = statusCode != 400 && statusCode != 401 && statusCode != 403;
-
-		if (isRetryable && attemptNumber < retries)
-		{
-			var backoff:Int = Std.int(Math.pow(2, attemptNumber + 1) * 500);
-
-			Timer.delay(function():Void
-			{
-				attempt(id, url, method, headers, body, onComplete, timeoutMs, retries, attemptNumber + 1);
-			}, backoff);
-
+			httpRequest.request(true);
 			return;
 		}
 
-		activeRequests.remove(id);
-		onComplete({success: false, status: statusCode, data: "", error: errorMessage});
+		httpRequest.request(false);
 	}
 }
