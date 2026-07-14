@@ -117,7 +117,7 @@ class Build extends HXProject
 		if (!debug)
 		{
 			haxeflags.push("-dce full");
-			haxeflags.push("--no-traces");
+			haxeflags.push("-D no-traces");
 		}
 	}
 
