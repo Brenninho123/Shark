@@ -1,0 +1,43 @@
+{
+	"network": {
+		"chatEndpoint": "",
+		"chatApiKey": "",
+		"imageEndpoint": "",
+		"imageApiKey": "",
+		"requireOnline": true
+	},
+	"chat": {
+		"systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.",
+		"maxHistory": 40,
+		"maxMessageLength": 4000,
+		"minRequestInterval": 0.6,
+		"maxRetries": 2
+	},
+	"image": {
+		"maxPromptLength": 1000,
+		"minRequestInterval": 1.0,
+		"maxRetries": 2,
+		"cacheEnabled": true,
+		"autoSaveToStorage": true,
+		"defaultWidth": 512,
+		"defaultHeight": 512
+	},
+	"audio": {
+		"musicVolume": 0.5,
+		"soundVolume": 0.7,
+		"startMuted": false
+	},
+	"security": {
+		"maxInputLength": 4000,
+		"maxRequestsPerWindow": 20,
+		"rateLimitWindowSeconds": 60
+	},
+	"connectivity": {
+		"onlineCheckInterval": 20,
+		"offlineCheckInterval": 5,
+		"checkTimeoutMs": 8000
+	},
+	"app": {
+		"buildVersion": "0.1.0"
+	}
+}
