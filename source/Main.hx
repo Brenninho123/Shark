@@ -15,8 +15,10 @@ import openfl.events.Event;
 import openfl.events.KeyboardEvent;
 import openfl.events.UncaughtErrorEvent;
 import openfl.system.Capabilities;
+import haxe.Json;
 import shark.active.system.Head;
 import shark.audio.Audio;
+import shark.backend.Paths;
 import shark.functions.ChatEngine;
 import shark.functions.ImageCreator;
 import shark.menus.MainMenuState;
@@ -73,6 +75,7 @@ class Main extends Sprite
 		setupInput();
 		setupLocale();
 		setupSave();
+		setupNetworkConfig();
 		setupSecurity();
 		setupConnectivity();
 		setupHeadSignals();
@@ -135,6 +138,42 @@ class Main extends Sprite
 
 		if (FlxG.save.data.musicVolume != null)
 			Audio.musicVolume = FlxG.save.data.musicVolume;
+	}
+
+	public static var isNetworkConfigLoaded(default, null):Bool = false;
+
+	function setupNetworkConfig():Void
+	{
+		var raw:String = Paths.getText("config");
+
+		if (raw == null)
+		{
+			logSecurityEvent("No network config found (assets/data/config.json)");
+			return;
+		}
+
+		try
+		{
+			var parsed = Json.parse(raw);
+
+			if (parsed.chatEndpoint != null)
+				ChatEngine.endpoint = parsed.chatEndpoint;
+
+			if (parsed.chatApiKey != null)
+				ChatEngine.apiKey = parsed.chatApiKey;
+
+			if (parsed.imageEndpoint != null)
+				ImageCreator.endpoint = parsed.imageEndpoint;
+
+			if (parsed.imageApiKey != null)
+				ImageCreator.apiKey = parsed.imageApiKey;
+
+			isNetworkConfigLoaded = true;
+		}
+		catch (e:Dynamic)
+		{
+			logSecurityEvent("Failed to parse network config");
+		}
 	}
 
 	function setupSecurity():Void
