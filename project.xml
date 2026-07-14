@@ -17,11 +17,11 @@
 	<haxelib name="flixel-ui" />
 	<haxelib name="hxcpp" if="cpp" />
 
-	<assets path="assets/images/icon.png" rename="assets/images/icon.png" />
+	<assets path="assets/images" rename="assets/images" />
 
 	<icon path="assets/images/icon.png" />
 
-	<define name="FLX_NO_NATIVE_CURSOR" if="mobile" />
+	<define name="FLX_NO_NATIVE_CURSOR" />
 	<define name="FLX_NO_DEBUG" unless="debug" />
 	<define name="FLX_NO_FOCUS_LOST_SCREEN" unless="debug" />
 	<define name="FLX_NO_SOUND_TRAY" if="mobile" />
