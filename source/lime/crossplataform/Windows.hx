@@ -39,7 +39,7 @@ class Windows
 			return;
 
 		project.haxeflags.push("-dce full");
-		project.haxeflags.push("--no-traces");
+		project.haxeflags.push("-D no-traces");
 	}
 
 	static function configureIcon(project:HXProject):Void
