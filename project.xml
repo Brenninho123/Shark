@@ -27,7 +27,7 @@
 	<define name="FLX_NO_SOUND_TRAY" if="mobile" />
 
 	<haxeflag name="-dce full" unless="debug" />
-	<haxeflag name="--no-traces" unless="debug" />
+	<haxedef name="no-traces" unless="debug" />
 
 	<section if="debug">
 		<haxedef name="debug" />
