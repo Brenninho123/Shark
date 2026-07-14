@@ -10,6 +10,7 @@ import lime.tools.Icon;
 import lime.tools.Certificate;
 import lime.crossplataform.Windows;
 import lime.crossplataform.mobile.Android;
+import lime.crossplataform.mobile.IOS;
 
 class Build extends HXProject
 {
@@ -132,13 +133,7 @@ class Build extends HXProject
 
 	function setupIOS():Void
 	{
-		window.orientation = LANDSCAPE;
-		window.fullscreen = true;
-
-		haxedefs.set("FLX_NO_NATIVE_CURSOR", "");
-
-		config.set("ios.deployment", "12.0");
-		config.set("ios.device", "universal");
+		IOS.configure(this);
 	}
 
 	function setupHTML5():Void
