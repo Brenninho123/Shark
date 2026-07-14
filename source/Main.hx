@@ -22,6 +22,7 @@ import shark.functions.ImageCreator;
 import shark.menus.MainMenuState;
 import shark.online.Online;
 import shark.online.manager.Internet;
+import shark.ui.input.Cursor;
 import shark.ui.security.Guard;
 
 #if sys
@@ -179,10 +180,10 @@ class Main extends Sprite
 		addChild(game);
 
 		FlxG.autoPause = true;
-		FlxG.mouse.visible = true;
+
+		Cursor.initialize();
 
 		#if mobile
-		FlxG.mouse.useSystemCursor = false;
 		FlxG.scaleMode = new flixel.system.scaleModes.RatioScaleMode();
 		#end
 	}
