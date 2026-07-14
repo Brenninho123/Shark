@@ -18,6 +18,7 @@
 	<haxelib name="hxcpp" if="cpp" />
 
 	<assets path="assets/images" rename="assets/images" />
+	<assets path="assets/data" rename="assets/data" />
 
 	<icon path="assets/images/icon.png" />
 
