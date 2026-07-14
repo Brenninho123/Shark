@@ -15,7 +15,6 @@ import openfl.events.Event;
 import openfl.events.KeyboardEvent;
 import openfl.events.UncaughtErrorEvent;
 import openfl.system.Capabilities;
-import haxe.Json;
 import shark.active.system.Head;
 import shark.audio.Audio;
 import shark.backend.Paths;
@@ -144,32 +143,23 @@ class Main extends Sprite
 
 	function setupNetworkConfig():Void
 	{
-		var raw:String = Paths.getText("config");
+		var parsed:Dynamic = Paths.getJson("config");
 
-		if (raw == null)
+		if (parsed == null)
 		{
-			logSecurityEvent("No app config found (assets/data/config.json)");
+			logSecurityEvent("No app config found or failed to parse (assets/data/config.json)");
 			return;
 		}
 
-		try
-		{
-			var parsed = Json.parse(raw);
+		applyNetworkSection(parsed.network);
+		applyChatSection(parsed.chat);
+		applyImageSection(parsed.image);
+		applyAudioSection(parsed.audio);
+		applySecuritySection(parsed.security);
+		applyConnectivitySection(parsed.connectivity);
+		applyAppSection(parsed.app);
 
-			applyNetworkSection(parsed.network);
-			applyChatSection(parsed.chat);
-			applyImageSection(parsed.image);
-			applyAudioSection(parsed.audio);
-			applySecuritySection(parsed.security);
-			applyConnectivitySection(parsed.connectivity);
-			applyAppSection(parsed.app);
-
-			isNetworkConfigLoaded = true;
-		}
-		catch (e:Dynamic)
-		{
-			logSecurityEvent("Failed to parse app config");
-		}
+		isNetworkConfigLoaded = true;
 	}
 
 	function applyNetworkSection(section:Dynamic):Void
