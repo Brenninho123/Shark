@@ -15,7 +15,7 @@ import shark.active.system.Head;
 import shark.audio.Audio;
 import shark.backend.Paths;
 import shark.functions.ChatEngine;
-import shark.online.Online;
+import shark.online.manager.Internet;
 
 class MainMenuState extends FlxState
 {
@@ -116,8 +116,8 @@ class MainMenuState extends FlxState
 		newChatButton.label.color = COLOR_FOAM;
 		add(newChatButton);
 
-		Online.onStatusChanged = onOnlineStatusChanged;
-		Online.start();
+		Internet.addListener(onOnlineStatusChanged);
+		onOnlineStatusChanged(Internet.isConnected);
 
 		Head.onThinkingChanged = onThinkingChanged;
 
@@ -290,11 +290,23 @@ class MainMenuState extends FlxState
 
 		appendToHistory("You: " + message);
 		inputField.text = "";
+
+		if (!isChatConfigured())
+		{
+			appendToHistory("Shark: I'm not connected to an AI backend yet. Set ChatEngine.endpoint (and apiKey, if needed) before I can reply.");
+			return;
+		}
+
 		Audio.play("message_send");
 
 		sendButton.alive = false;
 
 		Head.think(message, onReply, onError, onImageGenerated, onImageError);
+	}
+
+	function isChatConfigured():Bool
+	{
+		return StringTools.trim(ChatEngine.endpoint).length > 0;
 	}
 
 	function goToGameState():Void
@@ -306,13 +318,13 @@ class MainMenuState extends FlxState
 	{
 		appendToHistory("Shark: " + reply);
 		Audio.play("message_receive");
-		sendButton.alive = Online.isOnline;
+		sendButton.alive = Internet.isConnected;
 	}
 
 	function onError(error:String):Void
 	{
 		appendToHistory("Error: " + error);
-		sendButton.alive = Online.isOnline;
+		sendButton.alive = Internet.isConnected;
 	}
 
 	function onImageGenerated(bitmap:BitmapData):Void
