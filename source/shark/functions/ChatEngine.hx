@@ -1,10 +1,11 @@
 package shark.functions;
 
-import haxe.Http;
 import haxe.Json;
 import haxe.Timer;
 import openfl.display.BitmapData;
 import shark.functions.ImageCreator;
+import shark.online.Network;
+import shark.online.NetworkResponse;
 import shark.online.Online;
 
 #if sys
@@ -21,7 +22,6 @@ typedef ChatRequest = {
 	onError:String->Void,
 	?onImage:BitmapData->Void,
 	?onImageError:String->Void,
-	attempts:Int,
 	token:Int
 }
 
@@ -74,7 +74,6 @@ class ChatEngine
 			onError: onError,
 			onImage: onImage,
 			onImageError: onImageError,
-			attempts: 0,
 			token: currentToken
 		});
 
@@ -111,13 +110,6 @@ class ChatEngine
 		lastRequestTime = Timer.stamp();
 
 		var trimmedHistory:Array<ChatMessage> = history.length > maxHistory ? history.slice(history.length - maxHistory) : history;
-
-		var http = new Http(endpoint);
-		http.setHeader("Content-Type", "application/json");
-
-		if (apiKey != "")
-			http.setHeader("Authorization", 'Bearer $apiKey');
-
 		var messages:Array<ChatMessage> = trimmedHistory.concat([{role: "user", content: request.message}]);
 
 		var payload = {
@@ -125,24 +117,27 @@ class ChatEngine
 			messages: messages
 		};
 
-		http.setPostData(Json.stringify(payload));
+		var headers:Map<String, String> = new Map();
 
-		var statusCode:Int = 0;
+		if (apiKey != "")
+			headers.set("Authorization", 'Bearer $apiKey');
 
-		http.onStatus = function(status:Int):Void
-		{
-			statusCode = status;
-		};
-
-		http.onData = function(data:String):Void
+		Network.postJson(endpoint, payload, headers, function(response:NetworkResponse):Void
 		{
 			if (request.token != currentToken)
 				return;
 
+			if (!response.success)
+			{
+				request.onError(response.error);
+				finishRequest(request);
+				return;
+			}
+
 			try
 			{
-				var response = Json.parse(data);
-				var reply:String = response.reply;
+				var parsed = Json.parse(response.data);
+				var reply:String = parsed.reply;
 
 				history.push({role: "user", content: request.message});
 				history.push({role: "assistant", content: reply});
@@ -156,41 +151,10 @@ class ChatEngine
 			}
 			catch (e:Dynamic)
 			{
-				handleFailure(request, Std.string(e), statusCode);
+				request.onError(Std.string(e));
+				finishRequest(request);
 			}
-		};
-
-		http.onError = function(msg:String):Void
-		{
-			if (request.token != currentToken)
-				return;
-
-			handleFailure(request, msg, statusCode);
-		};
-
-		http.request(true);
-	}
-
-	static function handleFailure(request:ChatRequest, message:String, statusCode:Int):Void
-	{
-		request.attempts++;
-
-		var isRetryable:Bool = statusCode != 401 && statusCode != 403 && statusCode != 400;
-
-		if (isRetryable && request.attempts <= maxRetries)
-		{
-			var backoff:Int = Std.int(Math.pow(2, request.attempts) * 500);
-
-			Timer.delay(function():Void
-			{
-				executeRequest(request);
-			}, backoff);
-		}
-		else
-		{
-			request.onError(message);
-			finishRequest(request);
-		}
+		}, null, maxRetries);
 	}
 
 	static function finishRequest(request:ChatRequest):Void
