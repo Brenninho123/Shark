@@ -17,6 +17,8 @@ import shark.backend.Paths;
 import shark.functions.ChatEngine;
 import shark.online.manager.Internet;
 
+import Main;
+
 class MainMenuState extends FlxState
 {
 	static inline var COLOR_ABYSS:FlxColor = 0xFF00111F;
@@ -48,6 +50,9 @@ class MainMenuState extends FlxState
 	var conversation:Array<String> = [];
 	var isMobile:Bool;
 	var thinkingElapsed:Float = 0;
+	var latencyRefreshTimer:Float = 0;
+
+	static inline var LATENCY_REFRESH_INTERVAL:Float = 15;
 
 	override public function create():Void
 	{
@@ -268,6 +273,20 @@ class MainMenuState extends FlxState
 
 		if (!isMobile && FlxG.keys.justPressed.ENTER && inputField.text.length > 0)
 			sendMessage(inputField.text);
+
+		if (Internet.isConnected)
+		{
+			latencyRefreshTimer += elapsed;
+
+			if (latencyRefreshTimer >= LATENCY_REFRESH_INTERVAL)
+			{
+				latencyRefreshTimer = 0;
+				Internet.measureLatency(function(_):Void
+				{
+					statusText.text = Internet.getStatusLabel();
+				});
+			}
+		}
 	}
 
 	function onSendPressed():Void
@@ -293,7 +312,11 @@ class MainMenuState extends FlxState
 
 		if (!isChatConfigured())
 		{
-			appendToHistory("Shark: I'm not connected to an AI backend yet. Set ChatEngine.endpoint (and apiKey, if needed) before I can reply.");
+			var reason:String = Main.isNetworkConfigTrusted
+				? "I'm not connected to an AI backend yet. Set ChatEngine.endpoint (and apiKey, if needed) before I can reply."
+				: "My backend endpoint was blocked for security reasons (invalid URL). Check assets/data/config.json.";
+
+			appendToHistory("Shark: " + reason);
 			return;
 		}
 
@@ -366,8 +389,17 @@ class MainMenuState extends FlxState
 	{
 		statusDot.color = online ? COLOR_ONLINE : COLOR_OFFLINE;
 		statusText.color = online ? COLOR_ONLINE : COLOR_OFFLINE;
-		statusText.text = online ? "online" : "offline";
+		statusText.text = Internet.getStatusLabel();
 		sendButton.alive = online && !Head.isThinking;
+
+		if (online)
+		{
+			latencyRefreshTimer = 0;
+			Internet.measureLatency(function(_):Void
+			{
+				statusText.text = Internet.getStatusLabel();
+			});
+		}
 	}
 
 	function onThinkingChanged(thinking:Bool):Void
