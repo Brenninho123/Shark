@@ -153,6 +153,7 @@ class Main extends Sprite
 
 		applyNetworkSection(parsed.network);
 		applyChatSection(parsed.chat);
+		applyApiSection(parsed.api);
 		applyImageSection(parsed.image);
 		applyAudioSection(parsed.audio);
 		applySecuritySection(parsed.security);
@@ -205,6 +206,27 @@ class Main extends Sprite
 
 		if (section.maxRetries != null)
 			ChatEngine.maxRetries = section.maxRetries;
+	}
+
+	function applyApiSection(section:Dynamic):Void
+	{
+		if (section == null)
+			return;
+
+		if (section.chatModel != null)
+			ChatEngine.model = section.chatModel;
+
+		if (section.chatTemperature != null)
+			ChatEngine.temperature = section.chatTemperature;
+
+		if (section.chatMaxTokens != null)
+			ChatEngine.maxTokens = section.chatMaxTokens;
+
+		if (section.imageModel != null)
+			ImageCreator.model = section.imageModel;
+
+		if (section.imageQuality != null)
+			ImageCreator.quality = section.imageQuality;
 	}
 
 	function applyImageSection(section:Dynamic):Void
