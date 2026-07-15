@@ -13,6 +13,13 @@
 		"minRequestInterval": 0.6,
 		"maxRetries": 2
 	},
+	"api": {
+		"chatModel": "",
+		"chatTemperature": 0.8,
+		"chatMaxTokens": 1024,
+		"imageModel": "",
+		"imageQuality": "standard"
+	},
 	"image": {
 		"maxPromptLength": 1000,
 		"minRequestInterval": 1.0,
