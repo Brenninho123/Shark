@@ -28,6 +28,8 @@ class ImageCreator
 {
 	public static var endpoint:String = "";
 	public static var apiKey:String = "";
+	public static var model:String = "";
+	public static var quality:String = "standard";
 	public static var maxRetries:Int = 2;
 	public static var minRequestInterval:Float = 1.0;
 	public static var maxPromptLength:Int = 1000;
@@ -119,11 +121,15 @@ class ImageCreator
 	{
 		lastRequestTime = Timer.stamp();
 
-		var payload = {
+		var payload:Dynamic = {
 			prompt: request.prompt,
 			width: request.width,
-			height: request.height
+			height: request.height,
+			quality: quality
 		};
+
+		if (model != "")
+			Reflect.setField(payload, "model", model);
 
 		var headers:Map<String, String> = new Map();
 
