@@ -106,21 +106,21 @@ class LimeManager
 	static function setupMobileDefaults():Void
 	{
 		Online.onlineCheckInterval = 25;
-		Online.offlineCheckInterval = 8;
+		Online.offlineCheckIntervalBase = 8;
 		currentQualityTier = QUALITY_MEDIUM;
 	}
 
 	static function setupDesktopDefaults():Void
 	{
 		Online.onlineCheckInterval = 15;
-		Online.offlineCheckInterval = 5;
+		Online.offlineCheckIntervalBase = 5;
 		currentQualityTier = QUALITY_HIGH;
 	}
 
 	static function setupWebDefaults():Void
 	{
 		Online.onlineCheckInterval = 30;
-		Online.offlineCheckInterval = 10;
+		Online.offlineCheckIntervalBase = 10;
 		supportsFileStorage = false;
 		currentQualityTier = QUALITY_MEDIUM;
 	}
