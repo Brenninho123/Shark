@@ -34,7 +34,7 @@
 	},
 	"connectivity": {
 		"onlineCheckInterval": 20,
-		"offlineCheckInterval": 5,
+		"offlineCheckIntervalBase": 5,
 		"checkTimeoutMs": 8000
 	},
 	"app": {
