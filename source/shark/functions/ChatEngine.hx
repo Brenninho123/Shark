@@ -30,6 +30,9 @@ class ChatEngine
 	public static var endpoint:String = "";
 	public static var apiKey:String = "";
 	public static var systemPrompt:String = "";
+	public static var model:String = "";
+	public static var temperature:Float = 0.8;
+	public static var maxTokens:Int = 1024;
 	public static var maxRetries:Int = 2;
 	public static var maxHistory:Int = 40;
 	public static var minRequestInterval:Float = 0.6;
@@ -112,10 +115,15 @@ class ChatEngine
 		var trimmedHistory:Array<ChatMessage> = history.length > maxHistory ? history.slice(history.length - maxHistory) : history;
 		var messages:Array<ChatMessage> = trimmedHistory.concat([{role: "user", content: request.message}]);
 
-		var payload = {
+		var payload:Dynamic = {
 			system: systemPrompt,
-			messages: messages
+			messages: messages,
+			temperature: temperature,
+			max_tokens: maxTokens
 		};
+
+		if (model != "")
+			Reflect.setField(payload, "model", model);
 
 		var headers:Map<String, String> = new Map();
 
