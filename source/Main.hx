@@ -266,8 +266,8 @@ class Main extends Sprite
 		if (section.onlineCheckInterval != null)
 			Online.onlineCheckInterval = section.onlineCheckInterval;
 
-		if (section.offlineCheckInterval != null)
-			Online.offlineCheckInterval = section.offlineCheckInterval;
+		if (section.offlineCheckIntervalBase != null)
+			Online.offlineCheckIntervalBase = section.offlineCheckIntervalBase;
 
 		if (section.checkTimeoutMs != null)
 			Online.checkTimeoutMs = section.checkTimeoutMs;
