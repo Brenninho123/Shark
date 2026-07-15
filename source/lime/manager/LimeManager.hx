@@ -101,6 +101,18 @@ class LimeManager
 			setupDesktopDefaults();
 		else if (isWebTarget)
 			setupWebDefaults();
+
+		refineQualityWithDeviceCapability();
+	}
+
+	static function refineQualityWithDeviceCapability():Void
+	{
+		SutilLime.estimateDeviceCapability();
+
+		var suggestedTier:Int = SutilLime.suggestInitialQualityTier();
+
+		if (suggestedTier < currentQualityTier)
+			currentQualityTier = suggestedTier;
 	}
 
 	static function setupMobileDefaults():Void
@@ -152,6 +164,7 @@ class LimeManager
 		var frameMs:Float = FlxG.elapsed * 1000;
 
 		frameTimeSamples.push(frameMs);
+		SutilLime.pushFrameSample(frameMs);
 
 		if (frameTimeSamples.length > 60)
 			frameTimeSamples.shift();
