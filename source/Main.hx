@@ -23,14 +23,10 @@ import shark.functions.ImageCreator;
 import shark.menus.MainMenuState;
 import shark.online.Online;
 import shark.online.manager.Internet;
+import shark.ui.debug.CrasherLog;
 import shark.ui.debug.DebugDisplay;
 import shark.ui.input.Cursor;
 import shark.ui.security.Guard;
-
-#if sys
-import sys.io.File;
-import lime.system.System;
-#end
 
 class Main extends Sprite
 {
@@ -41,15 +37,12 @@ class Main extends Sprite
 	public static var systemLanguage(default, null):String = "en";
 
 	static inline var SAVE_NAME:String = "shark_save";
-	static inline var CRASH_LOG_FILENAME:String = "crash_log.txt";
 	static inline var CRASH_LOOP_LIMIT:Int = 5;
 	static inline var CRASH_LOOP_WINDOW_SECONDS:Float = 30;
 	static inline var MAX_LOGGED_MESSAGE_LENGTH:Int = 500;
 
 	var debugOverlay:DebugDisplay;
 	var debugOverlayVisible:Bool = false;
-
-	var crashTimestamps:Array<Float> = [];
 
 	public function new()
 	{
@@ -472,22 +465,9 @@ class Main extends Sprite
 		if (lastError.length > MAX_LOGGED_MESSAGE_LENGTH)
 			lastError = lastError.substr(0, MAX_LOGGED_MESSAGE_LENGTH);
 
-		logCrash(lastError);
-		registerCrash();
-	}
+		CrasherLog.logError(lastError);
 
-	function registerCrash():Void
-	{
-		var now:Float = haxe.Timer.stamp();
-		crashTimestamps.push(now);
-
-		var windowStart:Float = now - CRASH_LOOP_WINDOW_SECONDS;
-		crashTimestamps = crashTimestamps.filter(function(t:Float):Bool
-		{
-			return t >= windowStart;
-		});
-
-		if (crashTimestamps.length >= CRASH_LOOP_LIMIT && !isSafeMode)
+		if (CrasherLog.isCrashingRepeatedly(CRASH_LOOP_WINDOW_SECONDS, CRASH_LOOP_LIMIT) && !isSafeMode)
 			enterSafeMode();
 	}
 
@@ -499,7 +479,7 @@ class Main extends Sprite
 		LimeManager.disableRuntimeOptimization();
 		Audio.stopMusic(0);
 
-		logSecurityEvent("Entered safe mode after repeated crashes");
+		CrasherLog.logSecurity("Entered safe mode after repeated crashes");
 
 		if (FlxG.state != null && !Std.isOfType(FlxG.state, MainMenuState))
 			FlxG.switchState(new MainMenuState());
@@ -507,25 +487,6 @@ class Main extends Sprite
 
 	function logSecurityEvent(message:String):Void
 	{
-		logCrash('[SECURITY] $message');
-	}
-
-	function logCrash(message:String):Void
-	{
-		#if sys
-		try
-		{
-			var base:String = System.applicationStorageDirectory;
-
-			if (!StringTools.endsWith(base, "/") && !StringTools.endsWith(base, "\\"))
-				base += "/";
-
-			var line:String = '${Date.now()} | ${LimeManager.getBuildSummary()} | $message\n';
-			var output = File.append(base + CRASH_LOG_FILENAME, false);
-			output.writeString(line);
-			output.close();
-		}
-		catch (e:Dynamic) {}
-		#end
+		CrasherLog.logSecurity(message);
 	}
 }
