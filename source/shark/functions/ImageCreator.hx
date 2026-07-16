@@ -162,7 +162,7 @@ class ImageCreator
 						imageCache.set(buildCacheKey(request.prompt, request.width, request.height), bitmap);
 
 					if (autoSaveToStorage)
-						StorageUtil.saveImage(bitmap, generateFilename(request.prompt), function(_):Void {}, function(_):Void {});
+						StorageUtil.saveImage(bitmap, generateFilename(request.prompt), function(_):Void {}, function(_):Void {}, request.prompt);
 
 					request.onComplete(bitmap);
 					finishRequest(request);
