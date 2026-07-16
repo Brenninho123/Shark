@@ -137,6 +137,7 @@ class SutilLime
 		lines.push('Frame spikes: ${detectFrameSpikes()}');
 		lines.push('Online: ${Online.isOnline} (uptime ${Math.round(Online.getUptimePercentage())}%)');
 		lines.push('Time since native start: ${Math.round(MainCpp.getTimeSinceNativeStartMs())}ms');
+		lines.push('Boot checkpoints: ${MainCpp.getCheckpointReport()}');
 
 		#if cpp
 		lines.push('Memory: ${Math.round(CPP.getMemoryUsageMB())}MB / ${Math.round(CPP.getMemoryReservedMB())}MB');
