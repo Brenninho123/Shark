@@ -363,13 +363,20 @@ class Main extends Sprite
 			FlxG.signals.postUpdate.add(updateDebugOverlay);
 	}
 
+	var lastDebugState:flixel.FlxState;
+
 	function updateDebugOverlay():Void
 	{
 		if (!debugOverlayVisible || FlxG.state == null)
 			return;
 
-		if (debugOverlay.parent == null)
+		if (FlxG.state != lastDebugState)
+		{
+			debugOverlay = new DebugDisplay(10, 30);
+			debugOverlay.visible = debugOverlayVisible;
 			FlxG.state.add(debugOverlay);
+			lastDebugState = FlxG.state;
+		}
 
 		debugOverlay.extraTag = isSafeMode ? "SAFE MODE" : "";
 	}
