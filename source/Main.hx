@@ -23,6 +23,7 @@ import shark.functions.ImageCreator;
 import shark.menus.MainMenuState;
 import shark.online.Online;
 import shark.online.manager.Internet;
+import shark.ui.debug.DebugDisplay;
 import shark.ui.input.Cursor;
 import shark.ui.security.Guard;
 
@@ -45,7 +46,7 @@ class Main extends Sprite
 	static inline var CRASH_LOOP_WINDOW_SECONDS:Float = 30;
 	static inline var MAX_LOGGED_MESSAGE_LENGTH:Int = 500;
 
-	var debugOverlay:FlxText;
+	var debugOverlay:DebugDisplay;
 	var debugOverlayVisible:Bool = false;
 
 	var crashTimestamps:Array<Float> = [];
@@ -358,8 +359,7 @@ class Main extends Sprite
 	function setupDebugOverlay():Void
 	{
 		#if debug
-		debugOverlay = new FlxText(10, 30, 400, "");
-		debugOverlay.setFormat(null, 12, FlxColor.LIME, LEFT);
+		debugOverlay = new DebugDisplay(10, 30);
 		debugOverlay.visible = false;
 
 		if (FlxG.stage != null)
@@ -376,8 +376,7 @@ class Main extends Sprite
 		if (debugOverlay.parent == null)
 			FlxG.state.add(debugOverlay);
 
-		var safeModeTag:String = isSafeMode ? " | SAFE MODE" : "";
-		debugOverlay.text = LimeManager.getPerformanceSummary() + safeModeTag;
+		debugOverlay.extraTag = isSafeMode ? "SAFE MODE" : "";
 		#end
 	}
 
