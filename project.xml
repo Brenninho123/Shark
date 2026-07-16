@@ -15,6 +15,7 @@
 	<haxelib name="flixel" />
 	<haxelib name="flixel-addons" />
 	<haxelib name="flixel-ui" />
+	<haxelib name="hscript" />
 	<haxelib name="hxcpp" if="cpp" />
 
 	<assets path="assets/images" rename="assets/images" />
@@ -34,6 +35,28 @@
 		<haxedef name="debug" />
 	</section>
 
+	<certificate if="android"
+		unless="debug"
+		path="Certificates/android.keystore"
+		password="android"
+		alias="android"
+		alias-password="android" />
+
+	<architecture name="armv7" if="android" />
+	<architecture name="arm64" if="android" />
+
+	<config:android permissions="android.permission.INTERNET android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE" />
+	<config:android target-sdk-version="35" />
+	<config:android minimum-sdk-version="21" />
+	<config:android install-location="auto" />
+
+	<config:ios deployment="12.0" />
+	<config:ios device="universal" />
+	<config:ios extension="false" />
+
+	<config:html5 title="Shark" />
+
+</project>
 	<certificate if="android"
 		unless="debug"
 		path="Certificates/android.keystore"
