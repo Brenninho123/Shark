@@ -2,7 +2,6 @@ package;
 
 @:headerCode('
 #include <chrono>
-#include <cstdlib>
 #include <thread>
 ')
 class MainCpp
@@ -80,9 +79,5 @@ class MainCpp
 		#else
 		return 0;
 		#end
-	}
-}
-
-		return now - nativeStartTimeMs;
 	}
 }
