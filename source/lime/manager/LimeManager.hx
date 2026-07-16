@@ -219,7 +219,10 @@ class LimeManager
 		memoryUsageMB = CPP.getMemoryUsageMB();
 
 		if (memoryUsageMB > GC_MEMORY_THRESHOLD_MB)
+		{
+			shark.backend.Paths.clearVolatileCache();
 			CPP.collectGarbage(false);
+		}
 		#end
 	}
 
