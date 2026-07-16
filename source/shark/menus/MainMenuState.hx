@@ -16,6 +16,7 @@ import shark.audio.Audio;
 import shark.backend.Paths;
 import shark.functions.ChatEngine;
 import shark.online.manager.Internet;
+import lime.manager.LimeManager;
 
 import Main;
 
@@ -125,11 +126,40 @@ class MainMenuState extends FlxState
 		onOnlineStatusChanged(Internet.isConnected);
 
 		Head.onThinkingChanged = onThinkingChanged;
+		Head.onNavigate = onNavigateRequest;
 
 		restoreHistory();
 
+		if (conversation.length == 0)
+			appendToHistory("Shark: " + Head.getWelcomeMessage());
+
 		if (Paths.exists(Paths.music("ocean_ambient")))
 			Audio.playMusic("ocean_ambient");
+
+		createVersionTag();
+		animateTitle();
+	}
+
+	function onNavigateRequest(destination:String):Void
+	{
+		if (destination == "games")
+			goToGameState();
+	}
+
+	function createVersionTag():Void
+	{
+		var versionText = new FlxText(0, FlxG.height - (isMobile ? 18 : 14), FlxG.width - 10, 'v${LimeManager.buildVersion}');
+		versionText.setFormat(null, 10, COLOR_ACCENT, RIGHT);
+		versionText.alpha = 0.5;
+		add(versionText);
+	}
+
+	function animateTitle():Void
+	{
+		FlxTween.tween(titleText, {alpha: 0.75}, 1.6, {
+			ease: FlxEase.sineInOut,
+			type: PINGPONG
+		});
 	}
 
 	function restoreHistory():Void
@@ -292,25 +322,24 @@ class MainMenuState extends FlxState
 	function onSendPressed():Void
 	{
 		if (inputField.text.length > 0)
+		{
 			sendMessage(inputField.text);
+			pulseButton(sendButton);
+		}
+	}
+
+	function pulseButton(button:FlxButton):Void
+	{
+		button.scale.set(1.08, 1.08);
+		FlxTween.tween(button.scale, {x: 1, y: 1}, 0.15, {ease: FlxEase.quadOut});
 	}
 
 	function sendMessage(message:String):Void
 	{
-		var trimmed:String = StringTools.trim(message);
-
-		if (trimmed.toLowerCase() == "!play")
-		{
-			appendToHistory("You: " + message);
-			inputField.text = "";
-			goToGameState();
-			return;
-		}
-
 		appendToHistory("You: " + message);
 		inputField.text = "";
 
-		if (!isChatConfigured())
+		if (!isChatConfigured() && !isLocalCommand(message))
 		{
 			var reason:String = Main.isNetworkConfigTrusted
 				? "I'm not connected to an AI backend yet. Set ChatEngine.endpoint (and apiKey, if needed) before I can reply."
@@ -325,6 +354,14 @@ class MainMenuState extends FlxState
 		sendButton.alive = false;
 
 		Head.think(message, onReply, onError, onImageGenerated, onImageError);
+	}
+
+	function isLocalCommand(message:String):Bool
+	{
+		var trimmed:String = StringTools.trim(message).toLowerCase();
+		var firstChar:String = trimmed.length > 0 ? trimmed.charAt(0) : "";
+
+		return firstChar == "/" || firstChar == "!";
 	}
 
 	function isChatConfigured():Bool
@@ -370,6 +407,7 @@ class MainMenuState extends FlxState
 	{
 		var muted:Bool = Audio.toggleMute();
 		muteButton.text = muted ? "Unmute" : "Mute";
+		pulseButton(muteButton);
 	}
 
 	function onNewChatPressed():Void
@@ -383,6 +421,9 @@ class MainMenuState extends FlxState
 			remove(sprite, true);
 
 		imageSprites = [];
+
+		appendToHistory("Shark: " + Head.getWelcomeMessage());
+		pulseButton(newChatButton);
 	}
 
 	function onOnlineStatusChanged(online:Bool):Void
