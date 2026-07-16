@@ -1,18 +1,25 @@
 package shark.active.system;
 
 import openfl.display.BitmapData;
+import shark.audio.Audio;
 import shark.functions.ChatEngine;
 import shark.functions.ImageCreator;
 import shark.online.manager.Internet;
 import shark.ui.security.Guard;
 
-typedef CommandHandler = {
+#if cpp
+import lime.manager.LimeManager;
+#end
+
+typedef CommandRequest = {
 	args:String,
 	onReply:String->Void,
 	onError:String->Void,
 	?onImage:BitmapData->Void,
 	?onImageError:String->Void
-}->Void
+}
+
+typedef CommandHandler = CommandRequest->Void
 
 class Head
 {
@@ -20,6 +27,7 @@ class Head
 	public static var onThinkingChanged:Bool->Void;
 	public static var onFlaggedInput:String->Void;
 	public static var onRateLimited:Void->Void;
+	public static var onNavigate:String->Void;
 
 	public static var queueWhenOffline:Bool = true;
 
@@ -29,6 +37,12 @@ class Head
 
 	static var commands:Map<String, CommandHandler> = new Map();
 	static var commandsInitialized:Bool = false;
+
+	static var greetings:Array<String> = [
+		"Hey, I'm Shark! Ask me anything, or type /help to see what I can do.",
+		"Splash! Shark here, ready to chat. Type /help if you want a quick tour.",
+		"Hi, I'm Shark. Type !play if you're in the mood for a mini-game, or just say hello."
+	];
 
 	static function ensureCommandsInitialized():Void
 	{
@@ -41,14 +55,32 @@ class Head
 		registerCommand("!image", handleImageCommand);
 		registerCommand("/reset", handleResetCommand);
 		registerCommand("!reset", handleResetCommand);
+		registerCommand("/clear", handleResetCommand);
 		registerCommand("/help", handleHelpCommand);
 		registerCommand("!help", handleHelpCommand);
+		registerCommand("/about", handleAboutCommand);
+		registerCommand("!about", handleAboutCommand);
+		registerCommand("/status", handleStatusCommand);
+		registerCommand("!status", handleStatusCommand);
+		registerCommand("/stats", handleStatsCommand);
+		registerCommand("!stats", handleStatsCommand);
+		registerCommand("/mute", handleMuteCommand);
+		registerCommand("!mute", handleMuteCommand);
+		registerCommand("/unmute", handleUnmuteCommand);
+		registerCommand("!unmute", handleUnmuteCommand);
+		registerCommand("/play", handlePlayCommand);
+		registerCommand("!play", handlePlayCommand);
 	}
 
 	public static function registerCommand(name:String, handler:CommandHandler):Void
 	{
 		ensureCommandsInitialized();
 		commands.set(name.toLowerCase(), handler);
+	}
+
+	public static function getWelcomeMessage():String
+	{
+		return greetings[Std.random(greetings.length)];
 	}
 
 	public static function think(input:String, onReply:String->Void, onError:String->Void, ?onImage:BitmapData->Void, ?onImageError:String->Void):Void
@@ -137,7 +169,7 @@ class Head
 			action();
 	}
 
-	static function handleImageCommand(request:{args:String, onReply:String->Void, onError:String->Void, ?onImage:BitmapData->Void, ?onImageError:String->Void}):Void
+	static function handleImageCommand(request:CommandRequest):Void
 	{
 		if (request.args.length == 0)
 		{
@@ -165,20 +197,76 @@ class Head
 		});
 	}
 
-	static function handleResetCommand(request:{args:String, onReply:String->Void, onError:String->Void, ?onImage:BitmapData->Void, ?onImageError:String->Void}):Void
+	static function handleResetCommand(request:CommandRequest):Void
 	{
 		reset();
-		request.onReply("Conversation reset");
+		request.onReply("Conversation reset. Starting fresh!");
 	}
 
-	static function handleHelpCommand(request:{args:String, onReply:String->Void, onError:String->Void, ?onImage:BitmapData->Void, ?onImageError:String->Void}):Void
+	static function handleHelpCommand(request:CommandRequest):Void
 	{
-		var lines:Array<String> = ["Available commands:"];
-
-		for (name in commands.keys())
-			lines.push(name);
+		var lines:Array<String> = [
+			"Here's what I can do:",
+			"/image <description> - generate an image",
+			"/reset or /clear - start a new conversation",
+			"/play - open the mini-games menu",
+			"/mute or /unmute - toggle sound",
+			"/status - check my connection",
+			"/stats - see how much we've chatted",
+			"/about - learn more about me"
+		];
 
 		request.onReply(lines.join("\n"));
+	}
+
+	static function handleAboutCommand(request:CommandRequest):Void
+	{
+		request.onReply("I'm Shark, an AI built with HaxeFlixel. I can chat, generate images, and I've got a few mini-games if you want a break.");
+	}
+
+	static function handleStatusCommand(request:CommandRequest):Void
+	{
+		var lines:Array<String> = [];
+
+		lines.push('Connection: ${Internet.getStatusLabel()}');
+		lines.push('Chat configured: ${ChatEngine.endpoint != "" ? "yes" : "no"}');
+
+		#if cpp
+		lines.push('Build: ${LimeManager.getBuildSummary()}');
+		#end
+
+		request.onReply(lines.join("\n"));
+	}
+
+	static function handleStatsCommand(request:CommandRequest):Void
+	{
+		var lines:Array<String> = [
+			'Messages exchanged: $totalMessages',
+			'Images generated: $totalImages',
+			'Flagged inputs: $totalFlagged'
+		];
+
+		request.onReply(lines.join("\n"));
+	}
+
+	static function handleMuteCommand(request:CommandRequest):Void
+	{
+		Audio.setMuted(true);
+		request.onReply("Muted.");
+	}
+
+	static function handleUnmuteCommand(request:CommandRequest):Void
+	{
+		Audio.setMuted(false);
+		request.onReply("Unmuted.");
+	}
+
+	static function handlePlayCommand(request:CommandRequest):Void
+	{
+		if (onNavigate != null)
+			onNavigate("games");
+		else
+			request.onReply("Mini-games aren't available right now.");
 	}
 
 	public static function reset():Void
