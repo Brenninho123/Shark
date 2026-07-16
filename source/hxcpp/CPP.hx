@@ -2,7 +2,7 @@ package hxcpp;
 
 #if cpp
 import cpp.vm.Gc;
-import cpp.vm.Mutex;
+import sys.thread.Mutex;
 #end
 
 @:headerCode('
