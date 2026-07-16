@@ -2,13 +2,14 @@ package lime;
 
 import lime.tools.HXProject;
 import lime.tools.Platform;
-import lime.tools.Architecture;
 import lime.tools.Asset;
 import lime.tools.AssetType;
 import lime.tools.Haxelib;
 import lime.tools.Icon;
-import lime.tools.Certificate;
 import lime.crossplataform.Windows;
+import lime.crossplataform.HTML5;
+import lime.crossplataform.Linux;
+import lime.crossplataform.Mac;
 import lime.crossplataform.mobile.Android;
 import lime.crossplataform.mobile.IOS;
 
@@ -36,17 +37,17 @@ class Build extends HXProject
 		switch (target)
 		{
 			case WINDOWS:
-				setupWindows();
+				Windows.configure(this);
 			case ANDROID:
-				setupAndroid();
+				Android.configure(this);
 			case IOS:
-				setupIOS();
+				IOS.configure(this);
 			case HTML5:
-				setupHTML5();
+				HTML5.configure(this);
 			case LINUX:
-				setupLinux();
+				Linux.configure(this);
 			case MAC:
-				setupMac();
+				Mac.configure(this);
 			default:
 		}
 	}
@@ -73,7 +74,7 @@ class Build extends HXProject
 		window.width = 1280;
 		window.height = 720;
 		window.fps = 60;
-		window.background = 0x000000;
+		window.background = 0x00111F;
 		window.hardware = true;
 		window.vsync = false;
 		window.antialiasing = 0;
@@ -86,6 +87,7 @@ class Build extends HXProject
 
 	function setupHaxelibs():Void
 	{
+		haxelibs.push(new Haxelib("openfl"));
 		haxelibs.push(new Haxelib("flixel"));
 		haxelibs.push(new Haxelib("flixel-addons"));
 		haxelibs.push(new Haxelib("flixel-ui"));
@@ -93,7 +95,8 @@ class Build extends HXProject
 
 	function setupAssets():Void
 	{
-		assets.push(new Asset("assets", "assets", AssetType.BINARY));
+		assets.push(new Asset("assets/images", "assets/images", AssetType.BINARY));
+		assets.push(new Asset("assets/data", "assets/data", AssetType.TEXT));
 	}
 
 	function setupIcon():Void
@@ -119,41 +122,6 @@ class Build extends HXProject
 			haxeflags.push("-dce full");
 			haxeflags.push("-D no-traces");
 		}
-	}
-
-	function setupWindows():Void
-	{
-		Windows.configure(this);
-	}
-
-	function setupAndroid():Void
-	{
-		Android.configure(this);
-	}
-
-	function setupIOS():Void
-	{
-		IOS.configure(this);
-	}
-
-	function setupHTML5():Void
-	{
-		window.resizable = true;
-		window.allowHighDPI = true;
-	}
-
-	function setupLinux():Void
-	{
-		window.width = 1280;
-		window.height = 720;
-		window.resizable = true;
-	}
-
-	function setupMac():Void
-	{
-		window.width = 1280;
-		window.height = 720;
-		window.resizable = true;
 	}
 
 	function resolveBuildNumber():String
