@@ -2,6 +2,7 @@ package hxcpp;
 
 #if cpp
 import cpp.vm.Gc;
+import cpp.vm.Mutex;
 #end
 
 @:headerCode('
@@ -181,5 +182,119 @@ class CPP
 		}
 
 		return hash;
+	}
+
+	public static function fastMin(a:Float, b:Float):Float
+	{
+		#if cpp
+		return untyped __cpp__("({0} < {1} ? {0} : {1})", a, b);
+		#else
+		return a < b ? a : b;
+		#end
+	}
+
+	public static function fastMax(a:Float, b:Float):Float
+	{
+		#if cpp
+		return untyped __cpp__("({0} > {1} ? {0} : {1})", a, b);
+		#else
+		return a > b ? a : b;
+		#end
+	}
+
+	public static function fastAbs(value:Float):Float
+	{
+		#if cpp
+		return untyped __cpp__("std::fabs({0})", value);
+		#else
+		return value < 0 ? -value : value;
+		#end
+	}
+
+	public static function fastSign(value:Float):Int
+	{
+		#if cpp
+		return untyped __cpp__("({0} > 0.0 ? 1 : ({0} < 0.0 ? -1 : 0))", value);
+		#else
+		if (value > 0)
+			return 1;
+		if (value < 0)
+			return -1;
+		return 0;
+		#end
+	}
+
+	public static function fastFloor(value:Float):Int
+	{
+		#if cpp
+		return untyped __cpp__("(int)std::floor({0})", value);
+		#else
+		return Std.int(Math.floor(value));
+		#end
+	}
+
+	public static function fastCeil(value:Float):Int
+	{
+		#if cpp
+		return untyped __cpp__("(int)std::ceil({0})", value);
+		#else
+		return Std.int(Math.ceil(value));
+		#end
+	}
+
+	public static function isFiniteNumber(value:Float):Bool
+	{
+		#if cpp
+		return untyped __cpp__("std::isfinite({0})", value);
+		#else
+		return Math.isFinite(value);
+		#end
+	}
+
+	static var countersMutex:Mutex;
+	static var counters:Map<String, Int> = new Map();
+
+	static function ensureCountersMutex():Void
+	{
+		#if cpp
+		if (countersMutex == null)
+			countersMutex = new Mutex();
+		#end
+	}
+
+	public static function incrementCounter(name:String, amount:Int = 1):Int
+	{
+		#if cpp
+		ensureCountersMutex();
+		countersMutex.acquire();
+
+		var value:Int = (counters.exists(name) ? counters.get(name) : 0) + amount;
+		counters.set(name, value);
+
+		countersMutex.release();
+
+		return value;
+		#else
+		var value:Int = (counters.exists(name) ? counters.get(name) : 0) + amount;
+		counters.set(name, value);
+		return value;
+		#end
+	}
+
+	public static function getCounter(name:String):Int
+	{
+		return counters.exists(name) ? counters.get(name) : 0;
+	}
+
+	public static function resetCounter(name:String):Void
+	{
+		#if cpp
+		ensureCountersMutex();
+		countersMutex.acquire();
+		counters.set(name, 0);
+		countersMutex.release();
+		#else
+		counters.set(name, 0);
+		#end
 	}
 }
