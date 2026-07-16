@@ -80,9 +80,13 @@ class Main extends Sprite
 		setupConnectivity();
 		setupHeadSignals();
 
+		MainCpp.recordCheckpoint("pre_lime_shark");
 		LimeShark.initialize();
+		MainCpp.recordCheckpoint("lime_shark_ready");
 
 		setupGame();
+		MainCpp.recordCheckpoint("flixel_game_ready");
+
 		setupDebugOverlay();
 
 		#if debug
