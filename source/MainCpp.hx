@@ -2,21 +2,34 @@ package;
 
 @:headerCode('
 #include <chrono>
+#include <cstdlib>
+#include <thread>
 ')
 class MainCpp
 {
 	static var nativeStartTimeMs:Float = -1;
+	static var checkpoints:Map<String, Float> = new Map();
+	static var checkpointOrder:Array<String> = [];
 
 	public static function nativeInit():Void
 	{
+		nativeStartTimeMs = nowMs();
+		checkpoints = new Map();
+		checkpointOrder = [];
+
+		recordCheckpoint("native_init");
+	}
+
+	static function nowMs():Float
+	{
 		#if cpp
-		nativeStartTimeMs = untyped __cpp__("
+		return untyped __cpp__("
 			(double)std::chrono::duration_cast<std::chrono::microseconds>(
 				std::chrono::high_resolution_clock::now().time_since_epoch()
 			).count() / 1000.0
 		");
 		#else
-		nativeStartTimeMs = Sys.time() * 1000;
+		return Sys.time() * 1000;
 		#end
 	}
 
@@ -25,15 +38,50 @@ class MainCpp
 		if (nativeStartTimeMs < 0)
 			return 0;
 
+		return nowMs() - nativeStartTimeMs;
+	}
+
+	public static function recordCheckpoint(name:String):Void
+	{
+		if (!checkpoints.exists(name))
+			checkpointOrder.push(name);
+
+		checkpoints.set(name, getTimeSinceNativeStartMs());
+	}
+
+	public static function getCheckpoint(name:String):Float
+	{
+		return checkpoints.exists(name) ? checkpoints.get(name) : -1;
+	}
+
+	public static function getCheckpointReport():String
+	{
+		var lines:Array<String> = [];
+
+		for (name in checkpointOrder)
+			lines.push('$name: ${Math.round(checkpoints.get(name))}ms');
+
+		return lines.join(" | ");
+	}
+
+	public static function is64Bit():Bool
+	{
 		#if cpp
-		var now:Float = untyped __cpp__("
-			(double)std::chrono::duration_cast<std::chrono::microseconds>(
-				std::chrono::high_resolution_clock::now().time_since_epoch()
-			).count() / 1000.0
-		");
+		return untyped __cpp__("(sizeof(void*) == 8)");
 		#else
-		var now:Float = Sys.time() * 1000;
+		return true;
 		#end
+	}
+
+	public static function getNativeThreadHash():Int
+	{
+		#if cpp
+		return untyped __cpp__("(int)std::hash<std::thread::id>{}(std::this_thread::get_id())");
+		#else
+		return 0;
+		#end
+	}
+}
 
 		return now - nativeStartTimeMs;
 	}
