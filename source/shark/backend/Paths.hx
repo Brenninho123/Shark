@@ -9,6 +9,8 @@ import openfl.media.Sound;
 import openfl.text.Font;
 import shark.backend.JsonObject;
 
+import Main;
+
 class Paths
 {
 	static inline var ASSET_ROOT:String = "assets";
@@ -188,6 +190,43 @@ class Paths
 		return JsonObject.parse(raw);
 	}
 
+	public static function localizedPath(key:String, ?language:String):String
+	{
+		var lang:String = language != null ? language : Main.systemLanguage;
+		return 'lang/$lang/$key';
+	}
+
+	public static function getLocalizedText(key:String, ?language:String):String
+	{
+		var lang:String = language != null ? language : Main.systemLanguage;
+		var primary:String = getText(localizedPath(key, lang));
+
+		if (primary != null)
+			return primary;
+
+		if (lang != "en")
+		{
+			var fallback:String = getText(localizedPath(key, "en"));
+
+			if (fallback != null)
+				return fallback;
+		}
+
+		return null;
+	}
+
+	public static function getLocalizedJsonObject(key:String, ?language:String):JsonObject
+	{
+		var raw:String = getLocalizedText(key, language);
+		return JsonObject.parse(raw);
+	}
+
+	public static function hasLocalization(key:String, ?language:String):Bool
+	{
+		var lang:String = language != null ? language : Main.systemLanguage;
+		return dataExists(localizedPath(key, lang));
+	}
+
 	public static function dataExists(key:String):Bool
 	{
 		return exists(data(key));
@@ -283,6 +322,27 @@ class Paths
 			texts++;
 
 		return 'graphics: $graphics, sounds: $sounds, texts: $texts';
+	}
+
+	public static function getCacheEntryCount():Int
+	{
+		var count:Int = 0;
+
+		for (key in graphicCache.keys())
+			count++;
+
+		for (key in soundCache.keys())
+			count++;
+
+		for (key in textCache.keys())
+			count++;
+
+		return count;
+	}
+
+	public static function clearVolatileCache():Void
+	{
+		clearCache(false);
 	}
 
 	public static function clearCache(includePersistent:Bool = false):Void
