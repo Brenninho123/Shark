@@ -51,6 +51,8 @@ class Main extends Sprite
 	{
 		super();
 
+		MainCpp.nativeInit();
+
 		instance = this;
 
 		if (stage != null)
