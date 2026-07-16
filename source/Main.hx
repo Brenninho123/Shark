@@ -4,6 +4,7 @@ import flixel.FlxG;
 import flixel.FlxGame;
 import flixel.text.FlxText;
 import flixel.util.FlxColor;
+import lime.LimeShark;
 import lime.manager.LimeManager;
 import lime.ui.KeyCode;
 import openfl.display.FPS;
@@ -77,7 +78,7 @@ class Main extends Sprite
 		setupConnectivity();
 		setupHeadSignals();
 
-		LimeManager.initialize();
+		LimeShark.initialize();
 
 		setupGame();
 		setupDebugOverlay();
