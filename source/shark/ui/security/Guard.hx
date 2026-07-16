@@ -3,13 +3,20 @@ package shark.ui.security;
 import haxe.io.Bytes;
 import haxe.crypto.Sha256;
 
+#if cpp
+import hxcpp.CPP;
+#end
+
 class Guard
 {
 	public static var maxInputLength:Int = 4000;
 	public static var maxRequestsPerWindow:Int = 20;
 	public static var rateLimitWindowSeconds:Float = 60;
+	public static var maxImagePayloadBytes:Int = 15 * 1024 * 1024;
 
-	static var requestTimestamps:Array<Float> = [];
+	public static var trustedHosts:Array<String> = [];
+
+	static var rateLimitBuckets:Map<String, Array<Float>> = new Map();
 
 	static var suspiciousPatterns:Array<String> = [
 		"ignore previous instructions",
@@ -58,7 +65,40 @@ class Guard
 
 		var scheme:String = url.substr(0, schemeEnd).toLowerCase();
 
-		return allowedUrlSchemes.indexOf(scheme) != -1;
+		if (allowedUrlSchemes.indexOf(scheme) == -1)
+			return false;
+
+		if (trustedHosts.length == 0)
+			return true;
+
+		var host:String = extractHost(url, schemeEnd);
+
+		return host != null && trustedHosts.indexOf(host) != -1;
+	}
+
+	static function extractHost(url:String, schemeEnd:Int):String
+	{
+		var hostStart:Int = schemeEnd + 3;
+		var rest:String = url.substr(hostStart);
+
+		var endIndex:Int = rest.length;
+
+		for (marker in ["/", "?", "#", ":"])
+		{
+			var idx:Int = rest.indexOf(marker);
+
+			if (idx != -1 && idx < endIndex)
+				endIndex = idx;
+		}
+
+		var host:String = rest.substr(0, endIndex).toLowerCase();
+
+		return host.length > 0 ? host : null;
+	}
+
+	public static function isValidPayloadSize(bytes:Bytes, maxSizeBytes:Int):Bool
+	{
+		return bytes != null && bytes.length > 0 && bytes.length <= maxSizeBytes;
 	}
 
 	public static function isValidPngSignature(bytes:Bytes):Bool
@@ -85,12 +125,34 @@ class Guard
 
 	public static function isValidImagePayload(bytes:Bytes):Bool
 	{
+		if (!isValidPayloadSize(bytes, maxImagePayloadBytes))
+			return false;
+
 		return isValidPngSignature(bytes) || isValidJpegSignature(bytes);
 	}
 
 	public static function hashContent(text:String):String
 	{
 		return Sha256.encode(text);
+	}
+
+	public static function generateToken(length:Int = 16):String
+	{
+		var chars:String = "0123456789abcdef";
+		var buffer:StringBuf = new StringBuf();
+
+		for (i in 0...length)
+		{
+			#if cpp
+			var index:Int = CPP.secureRandomInt(0, chars.length - 1);
+			#else
+			var index:Int = Std.random(chars.length);
+			#end
+
+			buffer.addChar(chars.charCodeAt(index));
+		}
+
+		return buffer.toString();
 	}
 
 	public static function detectPromptInjection(text:String):Bool
@@ -107,36 +169,54 @@ class Guard
 		return false;
 	}
 
-	public static function isRateLimited():Bool
+	public static function isRateLimited(bucket:String = "default"):Bool
 	{
+		var timestamps:Array<Float> = getBucket(bucket);
 		var now:Float = haxe.Timer.stamp();
 		var windowStart:Float = now - rateLimitWindowSeconds;
 
-		requestTimestamps = requestTimestamps.filter(function(t:Float):Bool
+		timestamps = timestamps.filter(function(t:Float):Bool
 		{
 			return t >= windowStart;
 		});
 
-		return requestTimestamps.length >= maxRequestsPerWindow;
+		rateLimitBuckets.set(bucket, timestamps);
+
+		return timestamps.length >= maxRequestsPerWindow;
 	}
 
-	public static function registerRequest():Void
+	public static function registerRequest(bucket:String = "default"):Void
 	{
-		requestTimestamps.push(haxe.Timer.stamp());
+		var timestamps:Array<Float> = getBucket(bucket);
+		timestamps.push(haxe.Timer.stamp());
+		rateLimitBuckets.set(bucket, timestamps);
 	}
 
-	public static function checkAndRegister():Bool
+	public static function checkAndRegister(bucket:String = "default"):Bool
 	{
-		if (isRateLimited())
+		if (isRateLimited(bucket))
 			return false;
 
-		registerRequest();
+		registerRequest(bucket);
 		return true;
 	}
 
-	public static function resetRateLimit():Void
+	public static function resetRateLimit(bucket:String = "default"):Void
 	{
-		requestTimestamps = [];
+		rateLimitBuckets.set(bucket, []);
+	}
+
+	public static function resetAllRateLimits():Void
+	{
+		rateLimitBuckets = new Map();
+	}
+
+	static function getBucket(bucket:String):Array<Float>
+	{
+		if (!rateLimitBuckets.exists(bucket))
+			rateLimitBuckets.set(bucket, []);
+
+		return rateLimitBuckets.get(bucket);
 	}
 
 	public static function isSafeFilename(filename:String):Bool
