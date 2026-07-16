@@ -15,6 +15,7 @@ import shark.active.system.Head;
 import shark.audio.Audio;
 import shark.backend.Paths;
 import shark.functions.ChatEngine;
+import shark.menus.options.OptionsState;
 import shark.online.manager.Internet;
 import lime.manager.LimeManager;
 
@@ -38,6 +39,7 @@ class MainMenuState extends FlxState
 	var sendButton:FlxButton;
 	var muteButton:FlxButton;
 	var newChatButton:FlxButton;
+	var optionsButton:FlxButton;
 	var statusDot:FlxSprite;
 	var statusText:FlxText;
 	var thinkingText:FlxText;
@@ -121,6 +123,12 @@ class MainMenuState extends FlxState
 		newChatButton.color = COLOR_MID;
 		newChatButton.label.color = COLOR_FOAM;
 		add(newChatButton);
+
+		optionsButton = new FlxButton(newChatButton.x + newChatButton.width + 10, 12, "Options", onOptionsPressed);
+		optionsButton.setSize(isMobile ? 100 : 76, isMobile ? 40 : 26);
+		optionsButton.color = COLOR_MID;
+		optionsButton.label.color = COLOR_FOAM;
+		add(optionsButton);
 
 		Internet.addListener(onOnlineStatusChanged);
 		onOnlineStatusChanged(Internet.isConnected);
@@ -424,6 +432,11 @@ class MainMenuState extends FlxState
 
 		appendToHistory("Shark: " + Head.getWelcomeMessage());
 		pulseButton(newChatButton);
+	}
+
+	function onOptionsPressed():Void
+	{
+		FlxG.switchState(new OptionsState());
 	}
 
 	function onOnlineStatusChanged(online:Bool):Void
