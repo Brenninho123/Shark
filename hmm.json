@@ -31,6 +31,11 @@
 			"dir": null,
 			"ref": null,
 			"url": "https://github.com/HaxeFlixel/flixel-ui.git"
+		},
+		{
+			"name": "hscript",
+			"type": "haxelib",
+			"version": "2.7.0"
 		}
 	]
 }
