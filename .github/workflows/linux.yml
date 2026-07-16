@@ -1,0 +1,65 @@
+name: Build Linux
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            g++ \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libasound2-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxcursor-dev
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.7
+
+      - name: Install hmm
+        run: haxelib install hmm
+
+      - name: Cache haxelib dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/haxelib
+          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          restore-keys: |
+            ${{ runner.os }}-haxelib-
+
+      - name: Install dependencies
+        run: haxelib run hmm install
+
+      - name: Setup Lime
+        run: haxelib run lime setup -y
+
+      - name: Build Linux
+        run: haxelib run lime build linux -final
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-Linux
+          path: export/linux/bin
+          retention-days: 7
