@@ -11,20 +11,24 @@ class Audio
 	public static var isMuted(default, null):Bool = false;
 
 	static var currentMusic:FlxSound;
-	static var soundCache:Map<String, Bool> = new Map();
+	static var currentMusicKey:String;
 
 	public static function playMusic(key:String, loop:Bool = true, fadeInDuration:Float = 1):Void
 	{
+		if (key == currentMusicKey && currentMusic != null && currentMusic.playing)
+			return;
+
 		var path:String = Paths.music(key);
 
 		if (!Paths.exists(path))
 			return;
 
 		if (currentMusic != null && currentMusic.playing)
-			stopMusic();
+			stopMusic(0);
 
 		FlxG.sound.playMusic(path, isMuted ? 0 : musicVolume, loop);
 		currentMusic = FlxG.sound.music;
+		currentMusicKey = key;
 
 		if (currentMusic != null && fadeInDuration > 0)
 		{
@@ -33,23 +37,48 @@ class Audio
 		}
 	}
 
+	public static function crossfadeMusic(key:String, duration:Float = 1.5, loop:Bool = true):Void
+	{
+		if (key == currentMusicKey && currentMusic != null && currentMusic.playing)
+			return;
+
+		var outgoing:FlxSound = currentMusic;
+
+		if (outgoing != null)
+		{
+			outgoing.fadeOut(duration, 0, function(_):Void
+			{
+				outgoing.stop();
+			});
+		}
+
+		currentMusic = null;
+		currentMusicKey = null;
+
+		playMusic(key, loop, duration);
+	}
+
 	public static function stopMusic(fadeOutDuration:Float = 1):Void
 	{
 		if (currentMusic == null)
 			return;
 
+		var musicRef:FlxSound = currentMusic;
+
 		if (fadeOutDuration > 0)
 		{
-			currentMusic.fadeOut(fadeOutDuration, 0, function(_):Void
+			musicRef.fadeOut(fadeOutDuration, 0, function(_):Void
 			{
-				if (currentMusic != null)
-					currentMusic.stop();
+				musicRef.stop();
 			});
 		}
 		else
 		{
-			currentMusic.stop();
+			musicRef.stop();
 		}
+
+		currentMusic = null;
+		currentMusicKey = null;
 	}
 
 	public static function pauseMusic():Void
@@ -69,12 +98,25 @@ class Audio
 		if (isMuted)
 			return;
 
-		var path:String = Paths.sound(key);
+		var sound = Paths.getSound(key, true);
 
-		if (!Paths.exists(path))
+		if (sound == null)
 			return;
 
-		FlxG.sound.play(path, soundVolume * volumeScale);
+		FlxG.sound.play(cast sound, soundVolume * volumeScale);
+	}
+
+	public static function playRandom(baseKey:String, count:Int, volumeScale:Float = 1):Void
+	{
+		if (isMuted || count <= 0)
+			return;
+
+		var sound = Paths.getRandomSound(baseKey, count, true);
+
+		if (sound == null)
+			return;
+
+		FlxG.sound.play(cast sound, soundVolume * volumeScale);
 	}
 
 	public static function setMuted(value:Bool):Void
