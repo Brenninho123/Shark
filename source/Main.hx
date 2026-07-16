@@ -36,6 +36,8 @@ class Main extends Sprite
 	public static var isNetworkConfigTrusted(default, null):Bool = true;
 	public static var systemLanguage(default, null):String = "en";
 
+	public static var instance(default, null):Main;
+
 	static inline var SAVE_NAME:String = "shark_save";
 	static inline var CRASH_LOOP_LIMIT:Int = 5;
 	static inline var CRASH_LOOP_WINDOW_SECONDS:Float = 30;
@@ -47,6 +49,8 @@ class Main extends Sprite
 	public function new()
 	{
 		super();
+
+		instance = this;
 
 		if (stage != null)
 			init();
@@ -351,18 +355,16 @@ class Main extends Sprite
 
 	function setupDebugOverlay():Void
 	{
-		#if debug
 		debugOverlay = new DebugDisplay(10, 30);
-		debugOverlay.visible = false;
+		debugOverlayVisible = FlxG.save.data.showFpsCounter == true;
+		debugOverlay.visible = debugOverlayVisible;
 
 		if (FlxG.stage != null)
 			FlxG.signals.postUpdate.add(updateDebugOverlay);
-		#end
 	}
 
 	function updateDebugOverlay():Void
 	{
-		#if debug
 		if (!debugOverlayVisible || FlxG.state == null)
 			return;
 
@@ -370,7 +372,32 @@ class Main extends Sprite
 			FlxG.state.add(debugOverlay);
 
 		debugOverlay.extraTag = isSafeMode ? "SAFE MODE" : "";
-		#end
+	}
+
+	public function toggleDebugOverlay():Bool
+	{
+		debugOverlayVisible = !debugOverlayVisible;
+		debugOverlay.visible = debugOverlayVisible;
+
+		FlxG.save.data.showFpsCounter = debugOverlayVisible;
+		FlxG.save.flush();
+
+		return debugOverlayVisible;
+	}
+
+	public function isDebugOverlayVisible():Bool
+	{
+		return debugOverlayVisible;
+	}
+
+	public static function toggleFpsCounter():Bool
+	{
+		return instance != null ? instance.toggleDebugOverlay() : false;
+	}
+
+	public static function isFpsCounterVisible():Bool
+	{
+		return instance != null ? instance.isDebugOverlayVisible() : false;
 	}
 
 	function onStageResize(e:Event):Void
@@ -429,12 +456,7 @@ class Main extends Sprite
 
 		#if debug
 		if (e.keyCode == lime.ui.KeyCode.F3)
-		{
-			debugOverlayVisible = !debugOverlayVisible;
-
-			if (debugOverlay != null)
-				debugOverlay.visible = debugOverlayVisible;
-		}
+			toggleDebugOverlay();
 		#end
 	}
 
