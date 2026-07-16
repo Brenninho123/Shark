@@ -91,6 +91,7 @@ class Build extends HXProject
 		haxelibs.push(new Haxelib("flixel"));
 		haxelibs.push(new Haxelib("flixel-addons"));
 		haxelibs.push(new Haxelib("flixel-ui"));
+		haxelibs.push(new Haxelib("hscript"));
 	}
 
 	function setupAssets():Void
