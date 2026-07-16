@@ -12,6 +12,7 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -33,7 +34,7 @@ jobs:
         run: sdkmanager --install "ndk;21.4.7075529"
 
       - name: Setup Haxe
-        uses: krdlab/setup-haxe@v1
+        uses: krdlab/setup-haxe@v2
         with:
           haxe-version: 4.3.7
 
@@ -75,10 +76,26 @@ jobs:
             -dname "CN=Shark, OU=Brenninho, O=Brenninho, L=Unknown, S=Unknown, C=BR"
 
       - name: Build Android
-        run: haxelib run lime build android -final
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          attempt=1
+          max_attempts=2
+
+          until haxelib run lime build android -final; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Build failed after $max_attempts attempts"
+              exit 1
+            fi
+
+            echo "Build attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+          done
 
       - name: Upload artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Shark-Android
           path: export/android/bin/app/build/outputs/apk
+          retention-days: 7
