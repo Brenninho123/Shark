@@ -6,14 +6,6 @@ import flixel.util.FlxColor;
 import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
 
-enum BodyState
-{
-	IDLE;
-	THINKING;
-	TALKING;
-	REACTING;
-}
-
 class Body extends FlxSpriteGroup
 {
 	static inline var COLOR_CORE:FlxColor = 0xFF61A5C2;
