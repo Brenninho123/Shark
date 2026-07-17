@@ -2,7 +2,7 @@ package shark.scripting;
 
 import hscript.SharkScript;
 import shark.active.system.Body;
-import shark.active.system.Body.BodyState;
+import shark.active.system.BodyState;
 import shark.active.system.Head;
 import shark.audio.Audio;
 
