@@ -139,8 +139,7 @@ class SharkCamera
 		if (FlxG.camera == null)
 			return;
 
-		FlxG.camera.color = FlxColor.WHITE;
-		FlxTween.color(FlxG.camera, duration, FlxG.camera.color, color);
+		tweenCameraColor(FlxG.camera.color, color, duration);
 	}
 
 	public static function clearTint(duration:Float = 0.5):Void
@@ -148,18 +147,24 @@ class SharkCamera
 		if (FlxG.camera == null)
 			return;
 
-		FlxTween.color(FlxG.camera, duration, FlxG.camera.color, FlxColor.WHITE);
+		tweenCameraColor(FlxG.camera.color, FlxColor.WHITE, duration);
 	}
 
-	public static function follow(target:FlxSprite, lerpAmount:Float = 1, ?offsetX:Float, ?offsetY:Float):Void
+	static function tweenCameraColor(fromColor:FlxColor, toColor:FlxColor, duration:Float):Void
+	{
+		FlxTween.num(0, 1, duration, null, function(ratio:Float):Void
+		{
+			if (FlxG.camera != null)
+				FlxG.camera.color = FlxColor.interpolate(fromColor, toColor, ratio);
+		});
+	}
+
+	public static function follow(target:FlxSprite, lerpAmount:Float = 1):Void
 	{
 		if (FlxG.camera == null || target == null)
 			return;
 
 		FlxG.camera.follow(target, LOCKON, lerpAmount);
-
-		if (offsetX != null || offsetY != null)
-			FlxG.camera.followOffset.set(offsetX != null ? offsetX : 0, offsetY != null ? offsetY : 0);
 	}
 
 	public static function stopFollowing():Void
