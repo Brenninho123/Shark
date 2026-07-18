@@ -23,6 +23,7 @@ import shark.functions.ChatEngine;
 import shark.functions.ImageCreator;
 import shark.menus.MainMenuState;
 import shark.online.Online;
+import shark.online.User;
 import shark.online.manager.Internet;
 import shark.ui.debug.CrasherLog;
 import shark.ui.debug.DebugDisplay;
@@ -75,6 +76,7 @@ class Main extends Sprite
 		setupInput();
 		setupLocale();
 		setupSave();
+		User.initialize();
 		setupNetworkConfig();
 		setupSecurity();
 		setupConnectivity();
