@@ -16,6 +16,7 @@
 	<haxelib name="flixel-addons" />
 	<haxelib name="flixel-ui" />
 	<haxelib name="hscript" />
+	<haxelib name="hxdiscord_rpc" if="cpp" />
 	<haxelib name="hxcpp" if="cpp" />
 
 	<assets path="assets/images" rename="assets/images" />
