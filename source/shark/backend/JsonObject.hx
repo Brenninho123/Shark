@@ -125,6 +125,45 @@ class JsonObject
 		return result;
 	}
 
+	public function getIntArray(key:String):Array<Int>
+	{
+		var raw:Array<Dynamic> = getArray(key);
+		var result:Array<Int> = [];
+
+		for (item in raw)
+			result.push(Std.isOfType(item, Int) || Std.isOfType(item, Float) ? Std.int(item) : 0);
+
+		return result;
+	}
+
+	public function getFloatArray(key:String):Array<Float>
+	{
+		var raw:Array<Dynamic> = getArray(key);
+		var result:Array<Float> = [];
+
+		for (item in raw)
+			result.push(Std.isOfType(item, Int) || Std.isOfType(item, Float) ? cast(item, Float) : 0);
+
+		return result;
+	}
+
+	public function getBoolArray(key:String):Array<Bool>
+	{
+		var raw:Array<Dynamic> = getArray(key);
+		var result:Array<Bool> = [];
+
+		for (item in raw)
+			result.push(Std.isOfType(item, Bool) ? item : false);
+
+		return result;
+	}
+
+	public function getOneOf(key:String, allowedValues:Array<String>, defaultValue:String):String
+	{
+		var value:String = getString(key, defaultValue);
+		return allowedValues.indexOf(value) != -1 ? value : defaultValue;
+	}
+
 	public function getPath(path:String, ?defaultValue:Dynamic):Dynamic
 	{
 		var parts:Array<String> = path.split(".");
@@ -141,10 +180,63 @@ class JsonObject
 		return current != null ? current : defaultValue;
 	}
 
+	public function setPath(path:String, value:Dynamic):Void
+	{
+		var parts:Array<String> = path.split(".");
+		var current:Dynamic = data;
+
+		for (i in 0...parts.length - 1)
+		{
+			var part:String = parts[i];
+
+			if (!Reflect.hasField(current, part) || Reflect.field(current, part) == null)
+				Reflect.setField(current, part, {});
+
+			current = Reflect.field(current, part);
+		}
+
+		Reflect.setField(current, parts[parts.length - 1], value);
+	}
+
 	public function set(key:String, value:Dynamic):JsonObject
 	{
 		Reflect.setField(data, key, value);
 		return this;
+	}
+
+	public function remove(key:String):Void
+	{
+		if (data != null && Reflect.hasField(data, key))
+			Reflect.deleteField(data, key);
+	}
+
+	public function merge(other:JsonObject, overwrite:Bool = true):JsonObject
+	{
+		if (other == null)
+			return this;
+
+		for (key in other.keys())
+		{
+			if (overwrite || !has(key))
+				Reflect.setField(data, key, Reflect.field(other.toDynamic(), key));
+		}
+
+		return this;
+	}
+
+	public function clone():JsonObject
+	{
+		return JsonObject.parse(stringify());
+	}
+
+	public function toMap():Map<String, Dynamic>
+	{
+		var map:Map<String, Dynamic> = new Map();
+
+		for (key in keys())
+			map.set(key, Reflect.field(data, key));
+
+		return map;
 	}
 
 	public function keys():Array<String>
