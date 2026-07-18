@@ -7,6 +7,7 @@ import shark.functions.ImageCreator;
 import shark.online.Network;
 import shark.online.NetworkResponse;
 import shark.online.Online;
+import shark.online.User;
 
 #if sys
 import sys.FileSystem;
@@ -124,6 +125,9 @@ class ChatEngine
 
 		if (model != "")
 			Reflect.setField(payload, "model", model);
+
+		if (User.userId != null)
+			Reflect.setField(payload, "user", User.userId);
 
 		var headers:Map<String, String> = new Map();
 
