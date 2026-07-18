@@ -297,4 +297,96 @@ class CPP
 		counters.set(name, 0);
 		#end
 	}
+
+	static var timers:Map<String, Float> = new Map();
+
+	public static function startTimer(name:String):Void
+	{
+		timers.set(name, getHighResTimeMs());
+	}
+
+	public static function stopTimer(name:String):Float
+	{
+		if (!timers.exists(name))
+			return -1;
+
+		var elapsed:Float = getHighResTimeMs() - timers.get(name);
+		timers.remove(name);
+
+		return elapsed;
+	}
+
+	public static function peekTimer(name:String):Float
+	{
+		if (!timers.exists(name))
+			return -1;
+
+		return getHighResTimeMs() - timers.get(name);
+	}
+
+	public static function fastWrap(value:Float, min:Float, max:Float):Float
+	{
+		#if cpp
+		return untyped __cpp__("
+			[](double v, double lo, double hi) {
+				double range = hi - lo;
+				if (range <= 0.0) return lo;
+				double result = std::fmod(v - lo, range);
+				if (result < 0.0) result += range;
+				return result + lo;
+			}({0}, {1}, {2})
+		", value, min, max);
+		#else
+		var range:Float = max - min;
+
+		if (range <= 0)
+			return min;
+
+		var result:Float = (value - min) % range;
+
+		if (result < 0)
+			result += range;
+
+		return result + min;
+		#end
+	}
+
+	public static function fastPingPong(value:Float, length:Float):Float
+	{
+		if (length <= 0)
+			return 0;
+
+		var wrapped:Float = fastWrap(value, 0, length * 2);
+		return length - fastAbs(wrapped - length);
+	}
+
+	public static function fastDistance3D(x1:Float, y1:Float, z1:Float, x2:Float, y2:Float, z2:Float):Float
+	{
+		#if cpp
+		return untyped __cpp__("std::sqrt(({0} - {3}) * ({0} - {3}) + ({1} - {4}) * ({1} - {4}) + ({2} - {5}) * ({2} - {5}))", x1, y1, z1, x2, y2, z2);
+		#else
+		var dx:Float = x2 - x1;
+		var dy:Float = y2 - y1;
+		var dz:Float = z2 - z1;
+		return Math.sqrt(dx * dx + dy * dy + dz * dz);
+		#end
+	}
+
+	public static function dotProduct2D(x1:Float, y1:Float, x2:Float, y2:Float):Float
+	{
+		#if cpp
+		return untyped __cpp__("({0} * {2} + {1} * {3})", x1, y1, x2, y2);
+		#else
+		return x1 * x2 + y1 * y2;
+		#end
+	}
+
+	public static function crossProduct2D(x1:Float, y1:Float, x2:Float, y2:Float):Float
+	{
+		#if cpp
+		return untyped __cpp__("({0} * {3} - {1} * {2})", x1, y1, x2, y2);
+		#else
+		return x1 * y2 - y1 * x2;
+		#end
+	}
 }
