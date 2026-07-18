@@ -27,6 +27,7 @@ import shark.online.User;
 import shark.online.manager.Internet;
 import shark.ui.debug.CrasherLog;
 import shark.ui.debug.DebugDisplay;
+import shark.ui.discord.Discord;
 import shark.ui.input.Cursor;
 import shark.ui.security.Guard;
 
@@ -88,6 +89,8 @@ class Main extends Sprite
 
 		setupGame();
 		MainCpp.recordCheckpoint("flixel_game_ready");
+
+		setupDiscord();
 
 		setupDebugOverlay();
 
@@ -166,6 +169,7 @@ class Main extends Sprite
 		applySecuritySection(parsed.security);
 		applyConnectivitySection(parsed.connectivity);
 		applyAppSection(parsed.app);
+		applyDiscordSection(parsed.discord);
 
 		isNetworkConfigLoaded = true;
 	}
@@ -311,6 +315,65 @@ class Main extends Sprite
 			LimeManager.buildVersion = section.buildVersion;
 	}
 
+	var discordEnabled:Bool = false;
+	var discordClientId:String = "";
+
+	function applyDiscordSection(section:Dynamic):Void
+	{
+		if (section == null)
+			return;
+
+		if (section.enabled != null)
+			discordEnabled = section.enabled;
+
+		if (section.clientId != null)
+			discordClientId = section.clientId;
+	}
+
+	function setupDiscord():Void
+	{
+		#if cpp
+		if (!discordEnabled || StringTools.trim(discordClientId).length == 0)
+			return;
+
+		try
+		{
+			Discord.initialize(discordClientId);
+			Discord.update("In the main menu", "Just started up");
+
+			FlxG.signals.postUpdate.add(Discord.runCallbacks);
+			FlxG.signals.postStateSwitch.add(onDiscordStateSwitch);
+		}
+		catch (e:Dynamic)
+		{
+			CrasherLog.logWarning('Discord RPC failed to initialize: ${Std.string(e)}');
+		}
+		#end
+	}
+
+	function onDiscordStateSwitch():Void
+	{
+		#if cpp
+		if (!discordEnabled || FlxG.state == null)
+			return;
+
+		var stateName:String = Type.getClassName(Type.getClass(FlxG.state));
+
+		var label:String = switch (stateName)
+		{
+			case "shark.menus.MainMenuState": "Chatting with Shark";
+			case "shark.active.GameState": "Choosing a mini-game";
+			case "shark.active.games.BubblePopState": "Playing Bubble Pop";
+			case "shark.active.games.ReefRunnerState": "Playing Reef Runner";
+			case "shark.active.games.DeepDiveState": "Playing Deep Dive";
+			case "shark.menus.options.OptionsState": "Adjusting settings";
+			default: "Exploring the app";
+		};
+
+		Discord.update(label, "");
+		#end
+	}
+
 	function setupSecurity():Void
 	{
 		isNetworkConfigTrusted = true;
@@ -449,6 +512,11 @@ class Main extends Sprite
 	function onExiting(e:Event):Void
 	{
 		flushSave();
+
+		#if cpp
+		if (discordEnabled)
+			Discord.shutdown();
+		#end
 	}
 	#end
 
