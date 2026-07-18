@@ -7,7 +7,7 @@ class User
 {
 	public static var userId(default, null):String;
 	public static var sessionId(default, null):String;
-	public static var firstLaunchTime(default, null):Float;
+	public static var firstLaunchTime(default, null):Float = 0;
 	public static var sessionStartTime(default, null):Float;
 	public static var launchCount(default, null):Int = 0;
 
@@ -72,7 +72,7 @@ class User
 
 	public static function getAccountAgeDays():Float
 	{
-		if (firstLaunchTime == null || firstLaunchTime <= 0)
+		if (firstLaunchTime <= 0)
 			return 0;
 
 		return (nowSeconds() - firstLaunchTime) / 86400;
