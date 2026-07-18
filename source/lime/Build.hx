@@ -92,6 +92,9 @@ class Build extends HXProject
 		haxelibs.push(new Haxelib("flixel-addons"));
 		haxelibs.push(new Haxelib("flixel-ui"));
 		haxelibs.push(new Haxelib("hscript"));
+
+		if (target != HTML5)
+			haxelibs.push(new Haxelib("hxdiscord_rpc"));
 	}
 
 	function setupAssets():Void
