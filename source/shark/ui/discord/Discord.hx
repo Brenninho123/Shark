@@ -1,8 +1,7 @@
 package shark.ui.discord;
 
 #if cpp
-import hxdiscord_rpc.Discord as DiscordRpc;
-import hxdiscord_rpc.Types;
+import discord_rpc.DiscordRpc;
 #end
 
 class Discord
@@ -11,8 +10,6 @@ class Discord
 	public static var isConnected(default, null):Bool = false;
 
 	static var applicationId:String = "";
-	static var currentState:String = "";
-	static var currentDetails:String = "";
 	static var startTimestamp:Float = 0;
 
 	public static function initialize(clientId:String):Void
@@ -20,31 +17,30 @@ class Discord
 		#if cpp
 		isSupported = true;
 		applicationId = clientId;
-
-		var handlers = Types.DiscordEventHandlers.create();
-		handlers.ready = onReady;
-		handlers.disconnected = onDisconnected;
-		handlers.errored = onErrored;
-
-		DiscordRpc.Init(clientId, cpp.RawPointer.addressOf(handlers), true, null);
-
 		startTimestamp = Date.now().getTime() / 1000;
+
+		DiscordRpc.start({
+			clientID: clientId,
+			onReady: onReady,
+			onDisconnected: onDisconnected,
+			onError: onError
+		});
 		#else
 		isSupported = false;
 		#end
 	}
 
-	static function onReady(request:cpp.RawConstPointer<Types.DiscordUser>):Void
+	static function onReady():Void
 	{
 		isConnected = true;
 	}
 
-	static function onDisconnected(errorCode:Int, message:cpp.ConstCharStar):Void
+	static function onDisconnected(errorCode:Int, message:String):Void
 	{
 		isConnected = false;
 	}
 
-	static function onErrored(errorCode:Int, message:cpp.ConstCharStar):Void
+	static function onError(errorCode:Int, message:String):Void
 	{
 		isConnected = false;
 	}
@@ -55,34 +51,16 @@ class Discord
 		if (!isSupported)
 			return;
 
-		currentState = state;
-		currentDetails = details;
-
 		if (resetTimestamp)
 			startTimestamp = Date.now().getTime() / 1000;
 
-		var presence = Types.DiscordRichPresence.create();
-		presence.state = state;
-		presence.details = details;
-		presence.startTimestamp = Std.int(startTimestamp);
-
-		if (largeImageKey != null)
-			presence.largeImageKey = largeImageKey;
-
-		if (largeImageText != null)
-			presence.largeImageText = largeImageText;
-
-		DiscordRpc.UpdatePresence(cpp.RawConstPointer.addressOf(presence));
-		#end
-	}
-
-	public static function clear():Void
-	{
-		#if cpp
-		if (!isSupported)
-			return;
-
-		DiscordRpc.ClearPresence();
+		DiscordRpc.presence({
+			state: state,
+			details: details,
+			startTimestamp: Std.int(startTimestamp),
+			largeImageKey: largeImageKey,
+			largeImageText: largeImageText
+		});
 		#end
 	}
 
@@ -92,7 +70,7 @@ class Discord
 		if (!isSupported)
 			return;
 
-		DiscordRpc.RunCallbacks();
+		DiscordRpc.process();
 		#end
 	}
 
@@ -102,7 +80,7 @@ class Discord
 		if (!isSupported)
 			return;
 
-		DiscordRpc.Shutdown();
+		DiscordRpc.shutdown();
 		isConnected = false;
 		#end
 	}
