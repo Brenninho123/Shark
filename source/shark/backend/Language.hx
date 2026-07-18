@@ -3,6 +3,7 @@ package shark.backend;
 import flixel.FlxG;
 import shark.backend.JsonObject;
 import shark.backend.Paths;
+import shark.backend.language.LanguageData;
 
 import Main;
 
@@ -59,6 +60,12 @@ class Language
 			raw = getBundle("en").getPath(key, null);
 
 		if (raw == null)
+			raw = LanguageData.get(current).get(key);
+
+		if (raw == null && current != "en")
+			raw = LanguageData.get("en").get(key);
+
+		if (raw == null)
 			raw = key;
 
 		if (params != null)
@@ -70,7 +77,10 @@ class Language
 
 	public static function has(key:String):Bool
 	{
-		return getBundle(current).getPath(key, null) != null;
+		if (getBundle(current).getPath(key, null) != null)
+			return true;
+
+		return LanguageData.get(current).exists(key);
 	}
 
 	static function getBundle(lang:String):JsonObject
