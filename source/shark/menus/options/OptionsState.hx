@@ -8,6 +8,7 @@ import flixel.ui.FlxButton;
 import flixel.util.FlxColor;
 import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
+import shark.backend.Language;
 import shark.menus.MainMenuState;
 
 typedef OptionEntry = {
@@ -27,19 +28,14 @@ class OptionsState extends FlxState
 	static inline var COLOR_ON:FlxColor = 0xFF4ADE80;
 	static inline var COLOR_OFF:FlxColor = 0xFFF87171;
 
-	var options:Array<OptionEntry> = [
-		{
-			label: "FPS Counter",
-			description: "Show FPS and memory usage on screen",
-			getValue: Main.isFpsCounterVisible,
-			onToggle: Main.toggleFpsCounter
-		}
-	];
+	var options:Array<OptionEntry>;
 
 	var titleText:FlxText;
 	var backButton:FlxButton;
 	var toggleButtons:Array<FlxButton> = [];
+	var languageButton:FlxButton;
 	var isMobile:Bool;
+	var contentEndY:Float;
 
 	override public function create():Void
 	{
@@ -48,16 +44,26 @@ class OptionsState extends FlxState
 		isMobile = FlxG.onMobile;
 		bgColor = COLOR_ABYSS;
 
+		options = [
+			{
+				label: Language.get("options.fpsCounter"),
+				description: Language.get("options.fpsCounterDescription"),
+				getValue: Main.isFpsCounterVisible,
+				onToggle: Main.toggleFpsCounter
+			}
+		];
+
 		createDepthGradient();
 
-		titleText = new FlxText(0, isMobile ? 26 : 18, FlxG.width, "OPTIONS");
+		titleText = new FlxText(0, isMobile ? 26 : 18, FlxG.width, Language.get("options.title"));
 		titleText.setFormat(null, isMobile ? 34 : 28, COLOR_FOAM, CENTER);
 		titleText.setBorderStyle(SHADOW, COLOR_ACCENT, 2);
 		add(titleText);
 
 		createOptionsList();
+		createLanguageRow();
 
-		backButton = new FlxButton(20, FlxG.height - (isMobile ? 70 : 50), "Back", onBackPressed);
+		backButton = new FlxButton(20, FlxG.height - (isMobile ? 70 : 50), Language.get("menu.backButton"), onBackPressed);
 		backButton.setSize(isMobile ? 120 : 90, isMobile ? 50 : 32);
 		backButton.color = COLOR_MID;
 		backButton.label.color = COLOR_FOAM;
@@ -114,6 +120,42 @@ class OptionsState extends FlxState
 
 			toggleButtons.push(toggleButton);
 		}
+
+		contentEndY = startY + options.length * spacing;
+	}
+
+	function createLanguageRow():Void
+	{
+		var rowWidth:Float = FlxG.width - (isMobile ? 50 : 120);
+		var rowX:Float = (FlxG.width - rowWidth) / 2;
+		var rowHeight:Float = (isMobile ? 80 : 64) - 12;
+		var rowY:Float = contentEndY;
+
+		var row = new FlxSprite(rowX, rowY).makeGraphic(Std.int(rowWidth), Std.int(rowHeight), COLOR_MID);
+		row.alpha = 0.3;
+		add(row);
+
+		var labelText = new FlxText(rowX + 16, rowY + 8, rowWidth - 140, Language.get("options.language"));
+		labelText.setFormat(null, isMobile ? 20 : 16, COLOR_FOAM, LEFT);
+		add(labelText);
+
+		languageButton = new FlxButton(rowX + rowWidth - (isMobile ? 130 : 100), rowY + rowHeight / 2 - (isMobile ? 22 : 16),
+			Language.getLanguageName(Language.current), onLanguagePressed);
+		languageButton.setSize(isMobile ? 110 : 84, isMobile ? 44 : 32);
+		languageButton.color = COLOR_ACCENT;
+		languageButton.label.color = COLOR_ABYSS;
+		add(languageButton);
+	}
+
+	function onLanguagePressed():Void
+	{
+		var list:Array<String> = Language.supportedLanguages;
+		var currentIndex:Int = list.indexOf(Language.current);
+		var nextIndex:Int = (currentIndex + 1) % list.length;
+
+		Language.setLanguage(list[nextIndex]);
+
+		FlxG.switchState(new OptionsState());
 	}
 
 	function makeToggleHandler(entry:OptionEntry, index:Int):Void->Void
