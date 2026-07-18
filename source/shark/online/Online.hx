@@ -2,6 +2,13 @@ package shark.online;
 
 import haxe.Http;
 import haxe.Timer;
+import shark.ui.debug.CrasherLog;
+
+typedef ConnectivityEvent = {
+	timestamp:Float,
+	online:Bool,
+	?downtimeSeconds:Float
+}
 
 class Online
 {
@@ -22,10 +29,20 @@ class Online
 	public static var consecutiveFailures(default, null):Int = 0;
 	public static var lastCheckTime(default, null):Float = 0;
 	public static var averageLatencyMs(default, null):Float = -1;
+	public static var jitterMs(default, null):Float = 0;
+
+	public static var customCheck:(Bool->Void)->Void;
 
 	static var onlineSeconds:Float = 0;
 	static var totalTrackedSeconds:Float = 0;
 	static var lastTrackTime:Float = -1;
+	static var lastTransitionTime:Float = -1;
+
+	static var latencySamples:Array<Float> = [];
+	static inline var LATENCY_SAMPLE_WINDOW:Int = 10;
+
+	static var connectivityLog:Array<ConnectivityEvent> = [];
+	static inline var MAX_LOG_ENTRIES:Int = 50;
 
 	static var currentOfflineInterval:Float;
 
@@ -107,6 +124,16 @@ class Online
 		isChecking = true;
 		lastCheckTime = Timer.stamp();
 
+		if (customCheck != null)
+		{
+			customCheck(function(success:Bool):Void
+			{
+				isChecking = false;
+				handleCheckResult(success, onResult);
+			});
+			return;
+		}
+
 		attemptCheck(0, onResult);
 	}
 
@@ -115,13 +142,7 @@ class Online
 		if (urlIndex >= checkUrls.length)
 		{
 			isChecking = false;
-			consecutiveFailures++;
-			growOfflineInterval();
-			setStatus(false);
-
-			if (onResult != null)
-				onResult(false);
-
+			handleCheckResult(false, onResult);
 			return;
 		}
 
@@ -145,16 +166,10 @@ class Online
 
 			finished = true;
 			timeoutTimer.stop();
-
 			isChecking = false;
-			consecutiveFailures = 0;
-			currentOfflineInterval = offlineCheckIntervalBase;
 
 			recordLatency((Timer.stamp() - startTime) * 1000);
-			setStatus(true);
-
-			if (onResult != null)
-				onResult(true);
+			handleCheckResult(true, onResult);
 		};
 
 		http.onError = function(msg:String):Void
@@ -171,15 +186,74 @@ class Online
 		http.request(false);
 	}
 
+	static function handleCheckResult(success:Bool, ?onResult:Bool->Void):Void
+	{
+		if (success)
+		{
+			consecutiveFailures = 0;
+			currentOfflineInterval = offlineCheckIntervalBase;
+		}
+		else
+		{
+			consecutiveFailures++;
+			growOfflineInterval();
+		}
+
+		setStatus(success);
+
+		if (onResult != null)
+			onResult(success);
+	}
+
 	static function recordLatency(sampleMs:Float):Void
 	{
 		if (averageLatencyMs < 0)
-		{
 			averageLatencyMs = sampleMs;
-			return;
-		}
+		else
+			averageLatencyMs = averageLatencyMs * 0.7 + sampleMs * 0.3;
 
-		averageLatencyMs = averageLatencyMs * 0.7 + sampleMs * 0.3;
+		latencySamples.push(sampleMs);
+
+		if (latencySamples.length > LATENCY_SAMPLE_WINDOW)
+			latencySamples.shift();
+
+		jitterMs = computeJitter();
+	}
+
+	static function computeJitter():Float
+	{
+		if (latencySamples.length < 2)
+			return 0;
+
+		var mean:Float = 0;
+
+		for (sample in latencySamples)
+			mean += sample;
+
+		mean /= latencySamples.length;
+
+		var variance:Float = 0;
+
+		for (sample in latencySamples)
+			variance += (sample - mean) * (sample - mean);
+
+		variance /= latencySamples.length;
+
+		return Math.sqrt(variance);
+	}
+
+	public static function getStabilityLabel():String
+	{
+		if (!isOnline)
+			return "offline";
+
+		if (jitterMs < 30)
+			return "stable";
+
+		if (jitterMs < 100)
+			return "variable";
+
+		return "unstable";
 	}
 
 	static function growOfflineInterval():Void
@@ -194,11 +268,60 @@ class Online
 
 		if (wasOnline != value)
 		{
+			recordTransition(value);
+
 			if (onStatusChanged != null)
 				onStatusChanged(value);
 
 			if (isRunning)
 				scheduleNext();
 		}
+	}
+
+	static function recordTransition(nowOnline:Bool):Void
+	{
+		var now:Float = Timer.stamp();
+		var downtime:Null<Float> = null;
+
+		if (nowOnline && lastTransitionTime >= 0)
+		{
+			downtime = now - lastTransitionTime;
+			CrasherLog.logWarning('Back online after ${Math.round(downtime)}s offline');
+		}
+		else if (!nowOnline)
+		{
+			CrasherLog.logWarning("Connection lost");
+		}
+
+		lastTransitionTime = now;
+
+		connectivityLog.push({
+			timestamp: now,
+			online: nowOnline,
+			downtimeSeconds: downtime
+		});
+
+		if (connectivityLog.length > MAX_LOG_ENTRIES)
+			connectivityLog.shift();
+	}
+
+	public static function getConnectivityLog():Array<ConnectivityEvent>
+	{
+		return connectivityLog.copy();
+	}
+
+	public static function getLastDowntimeSeconds():Float
+	{
+		var i:Int = connectivityLog.length - 1;
+
+		while (i >= 0)
+		{
+			if (connectivityLog[i].downtimeSeconds != null)
+				return connectivityLog[i].downtimeSeconds;
+
+			i--;
+		}
+
+		return 0;
 	}
 }
