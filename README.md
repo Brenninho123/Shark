@@ -10,155 +10,161 @@
 
 ## About
 
-Shark is a HaxeFlixel application that brings a conversational AI directly into a game engine environment. It combines a chat interface, AI-driven image generation, a small collection of mini-games, and a fully mobile-ready UI into a single lightweight app, built entirely in Haxe.
+Shark is a HaxeFlixel application that brings a conversational AI into a game engine environment. It combines a chat interface, AI-driven image generation, a small collection of mini-games, a scriptable behavior layer, and a fully mobile-ready UI — all built entirely in Haxe, with native C++ used where it genuinely helps.
 
-The project is structured around a "brain" system (`Head`) that decides how to respond to user input — routing plain conversation through a chat backend, and image requests through a dedicated image generation pipeline — while keeping UI, networking, storage, audio, and performance concerns cleanly separated into their own systems.
+The app is organized around a "brain and body" metaphor: `Head` decides how to respond to input (chat, commands, image requests), while `Body` is its animated on-screen avatar, reacting visually to what `Head` is doing. Everything else — networking, storage, audio, security, performance — is split into focused, independent systems.
 
 ## Features
 
-- **Chat interface** with persistent conversation history (saved to disk and restored on launch), request queueing, and automatic retry with exponential backoff
-- **AI image generation**, triggered either explicitly (`/image <description>`) or automatically when the AI embeds an image tag in its reply, with in-memory caching and automatic local saving
-- **Mini-games**, accessible from the chat by typing `!play`:
-  - **Bubble Pop** — pop rising bubbles before they escape
-  - **Reef Runner** — an endless runner dodging obstacles
-  - **Deep Dive** — descend while dodging falling rocks
-- **Local image storage**, saving generated images as PNG files into a `content` folder in the app's private storage
-- **Online/offline detection**, with a live status indicator, latency measurement, and a "run when back online" action queue
-- **Persistent settings**, remembering mute state and volume between sessions
-- **Ambient audio system**, with background music, sound effects, fades, and a global mute toggle
-- **Mobile-first UI**, with touch-friendly controls, adaptive sizing, orientation handling, and Android back-button support
-- **Aquatic visual theme**, with animated waves, light rays, kelp, and bubbles rendered entirely in HaxeFlixel
-- **Runtime performance management**, adaptively scaling render quality and triggering garbage collection based on measured frame time and memory usage
-- **Native C++ utilities** (on C++ targets) for fast math and native memory/GC control
-- **Crash logging**, appending uncaught errors with build info to a local log file for later inspection
-- **Cross-platform builds**: Windows, Android, and iOS (simulator), with automated CI via GitHub Actions
+- **Chat interface** with persistent history (saved to disk, restored on launch), request queueing, automatic retry, and a built-in command system (`/image`, `/help`, `/about`, `/status`, `/stats`, `/mute`, `/reset`, `/play`)
+- **AI image generation**, with in-memory caching, automatic local saving (with prompt metadata), and magic-byte validation before decoding
+- **An animated avatar (`Body`)** that reacts to conversation state — idle, thinking, talking, reacting
+- **Mini-games**, reachable via `!play`: Bubble Pop, Reef Runner, Deep Dive — all with keyboard, mouse, touch, and gamepad support
+- **A scripting layer** (`hscript`-based) with a sandboxed API for extending behavior without recompiling
+- **Advanced connectivity management**: adaptive polling, exponential backoff, jitter/stability tracking, connectivity event history, and an offline action queue with expiration
+- **A security layer** (`Guard`): input sanitization, prompt-injection flagging, rate limiting, payload validation, URL allow-listing, and safe filename checks
+- **Structured crash logging** with deduplication and repeat-crash detection that triggers a safe mode
+- **Runtime performance management**: adaptive render quality, frame-time/memory monitoring, and device capability scoring
+- **Native C++ utilities**: fast math, secure randomness, thread-safe counters, native boot checkpoints
+- **Persistent, externalized configuration** (`config.json`) covering network, chat, API parameters, image generation, audio, security, and connectivity — kept out of version control
+- **Cross-platform builds**: Windows, Android, iOS, Linux, and macOS, all with automated, hardened CI
 
 ## Project Structure
 
 ```
 Shark/
 ├── source/
-│   ├── Main.hx                       Application entry point and lifecycle
+│   ├── Main.hx                         Application entry point & lifecycle
+│   ├── MainCpp.hx                      Native boot checkpoints (embedded C++)
+│   ├── flixel/
+│   │   └── FlixelShark.hx              UI factories, transitions, shared visual helpers
+│   ├── hscript/
+│   │   └── SharkScript.hx              Sandboxed hscript wrapper
 │   ├── hxcpp/
-│   │   └── CPP.hx                    Native C++ utilities (GC, memory, fast math)
+│   │   └── CPP.hx                      Native math, GC, memory, secure random, hashing
 │   ├── lime/
-│   │   ├── Build.hx                  Programmatic build configuration (replaces Project.xml)
+│   │   ├── Build.hx                    Programmatic build config (alt. to Project.xml)
+│   │   ├── LimeShark.hx                Unified facade over Lime/native systems
+│   │   ├── crossplataform/             Per-platform build modules
+│   │   │   ├── Windows.hx / HTML5.hx / Linux.hx / Mac.hx
+│   │   │   └── mobile/Android.hx / IOS.hx
+│   │   ├── input/
+│   │   │   └── LimeInput.hx            Low-level window/keyboard/soft-keyboard access
 │   │   └── manager/
-│   │       └── LimeManager.hx        Runtime platform detection & performance management
+│   │       ├── LimeManager.hx          Platform detection & runtime performance
+│   │       └── SutilLime.hx            Device capability scoring & diagnostics
 │   └── shark/
 │       ├── active/
-│       │   ├── GameState.hx          Mini-game selection screen
-│       │   ├── games/
-│       │   │   ├── BubblePopState.hx
-│       │   │   ├── ReefRunnerState.hx
-│       │   │   └── DeepDiveState.hx
+│       │   ├── GameState.hx            Mini-game selection screen
+│       │   ├── games/                  BubblePopState, ReefRunnerState, DeepDiveState
 │       │   └── system/
-│       │       └── Head.hx           Core decision-making system ("the brain")
+│       │       ├── Head.hx             Decision-making & command system ("the brain")
+│       │       ├── Body.hx             Animated avatar ("the body")
+│       │       └── BodyState.hx
 │       ├── audio/
-│       │   └── Audio.hx              Music/SFX playback, volume, mute
+│       │   └── Audio.hx                Music/SFX, crossfade, mute, volume
 │       ├── backend/
-│       │   └── Paths.hx              Asset path resolution and caching
+│       │   ├── Paths.hx                Asset resolution, caching, localization
+│       │   ├── JsonObject.hx           Type-safe JSON wrapper
+│       │   ├── SharkCamera.hx          Camera effects & scene transitions
+│       │   └── input/
+│       │       └── Controls.hx         Unified keyboard/gamepad/touch for gameplay
 │       ├── functions/
-│       │   ├── ChatEngine.hx         AI chat requests, queueing, retries, persistence
-│       │   └── ImageCreator.hx       AI image generation, caching, auto-save
+│       │   ├── ChatEngine.hx           Chat requests, queueing, persistence
+│       │   └── ImageCreator.hx         Image generation, caching, auto-save
 │       ├── menus/
-│       │   └── MainMenuState.hx      Main menu and chat UI
+│       │   ├── MainMenuState.hx        Main menu & chat UI
+│       │   └── options/OptionsState.hx Settings screen
 │       ├── mobile/
-│       │   └── StorageUtil.hx        Saves generated images to local storage
-│       └── online/
-│           ├── Online.hx             Connectivity polling
-│           └── manager/
-│               └── Internet.hx       High-level connectivity manager
+│       │   └── StorageUtil.hx          Mobile-only image storage with metadata & quotas
+│       ├── online/
+│       │   ├── Online.hx               Connectivity polling, jitter, event log
+│       │   ├── Network.hx              Generic HTTP client (retry, timeout, cancel)
+│       │   ├── NetworkResponse.hx
+│       │   └── manager/Internet.hx     Connectivity management & offline queue
+│       ├── scripting/
+│       │   └── HScript.hx              App-bound scripting API (audio, body, stats)
+│       └── ui/
+│           ├── input/Input.hx          Chat-UI input helpers (pointer, swipe)
+│           ├── input/Cursor.hx         Custom mouse cursor
+│           ├── security/Guard.hx       Sanitization, rate limiting, validation
+│           └── debug/
+│               ├── DebugDisplay.hx     FPS/memory overlay (F3)
+│               └── CrasherLog.hx       Structured crash logging
 ├── assets/
-│   └── images/
-│       └── icon.png                  Application icon
-├── Project.xml                       Lime/OpenFL project configuration
-├── hmm.json                          Haxe dependency lockfile
-└── .github/workflows/                CI build pipelines (Windows, Android, iOS)
+│   ├── images/                         icon.png, cursor/, etc.
+│   └── data/                           config.json (gitignored), localization files
+├── Project.xml                         Lime/OpenFL project configuration
+├── hmm.json                            Haxe dependency lockfile
+└── .github/workflows/                  CI: Windows, Android, iOS, Linux, macOS
 ```
 
 ## Requirements
 
 - [Haxe](https://haxe.org/) 4.3.x
 - [hmm](https://github.com/andywhite37/hmm) for dependency management
-- [Lime](https://lime.software/) 8.3.2
-- [HaxeFlixel](https://haxeflixel.com/) 5.9.0
-- [hxcpp](https://github.com/HaxeFoundation/hxcpp) 4.3.2 (for native/C++ targets)
+- [Lime](https://lime.software/) 8.3.2, [OpenFL](https://www.openfl.org/) 9.5.2
+- [HaxeFlixel](https://haxeflixel.com/) 6.1.2, [flixel-addons](https://github.com/HaxeFlixel/flixel-addons) 4.0.1
+- [flixel-ui](https://github.com/HaxeFlixel/flixel-ui) (git, tracks flixel compatibility)
+- [hxcpp](https://github.com/HaxeFoundation/hxcpp) 4.3.2, [hscript](https://github.com/HaxeFoundation/hscript) 2.7.0
 
 ## Installation
-
-Clone the repository:
 
 ```bash
 git clone https://github.com/Brenninho123/Shark.git
 cd Shark
-```
-
-Install dependencies with `hmm`:
-
-```bash
 haxelib install hmm
 haxelib run hmm install
-```
-
-Set up Lime for your target platform:
-
-```bash
 haxelib run lime setup -y
 ```
 
 ## Configuration
 
-Shark connects to an external API for chat and image generation. Before running the app, configure the endpoints and credentials, typically in `Main.hx` before the game window is created:
+Shark loads its configuration from `assets/data/config.json` at startup (parsed by `Main.hx`, applied across `ChatEngine`, `ImageCreator`, `Audio`, `Guard`, `Online`, and `LimeManager`). This file is **not** committed — add it to `.gitignore` and create it locally:
 
-```haxe
-shark.functions.ChatEngine.endpoint = "https://your-api-endpoint.com/chat";
-shark.functions.ChatEngine.apiKey = "your-api-key";
-
-shark.functions.ImageCreator.endpoint = "https://your-api-endpoint.com/image";
-shark.functions.ImageCreator.apiKey = "your-api-key";
+```json
+{
+	"network": {
+		"chatEndpoint": "https://your-api.com/chat",
+		"chatApiKey": "your-key",
+		"imageEndpoint": "https://your-api.com/image",
+		"imageApiKey": "your-key",
+		"requireOnline": true
+	},
+	"chat": { "systemPrompt": "...", "maxHistory": 40 },
+	"api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
+	"image": { "cacheEnabled": true, "autoSaveToStorage": true },
+	"audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
+	"security": { "maxRequestsPerWindow": 20 },
+	"connectivity": { "onlineCheckInterval": 20 }
+}
 ```
 
-Other tunable settings include `ChatEngine.maxRetries`, `ChatEngine.maxHistory`, `ImageCreator.cacheEnabled`, `ImageCreator.autoSaveToStorage`, and `Online.checkInterval`.
+Untrusted or malformed endpoint URLs are automatically blocked by `Guard`/`Main.setupSecurity()` before any request can be made.
 
 ## Building
 
-**Windows:**
-
 ```bash
 haxelib run lime build windows -final
-```
-
-**Android:**
-
-```bash
 haxelib run lime build android -final
-```
-
-**iOS (simulator):**
-
-```bash
 haxelib run lime build ios -simulator -final
+haxelib run lime build linux -final
+haxelib run lime build mac -final
 ```
 
-CI builds for all three targets run automatically via GitHub Actions (`.github/workflows/`). Android release builds are signed automatically in CI using a generated keystore.
+All five targets build automatically via GitHub Actions on every push. Android release builds are signed with an auto-generated keystore in CI.
 
 ## Usage
 
-- Type a message and press **Enter** (desktop) or tap **Send** (mobile) to chat with the AI
-- Type `/image <description>` to generate an image directly
-- Type `!play` to jump to the mini-game selection screen
-- The AI can also embed image generation requests within its own replies
-- Generated images are saved automatically to the `content` folder in the app's local storage
-- The chat history persists automatically between sessions
-
-## Debugging
-
-In debug builds, press **F3** to toggle a performance overlay showing average FPS, current quality tier, and memory usage.
+- Type a message and press **Enter** (desktop) or tap **Send** (mobile) to chat
+- Built-in commands: `/image <description>`, `/help`, `/about`, `/status`, `/stats`, `/mute`, `/unmute`, `/reset`, `/play`
+- The avatar reacts visually to sending, thinking, replying, and errors
+- Chat history and generated images persist automatically between sessions
+- **F3** toggles a performance overlay (FPS, memory) in any build; it can also be turned on permanently from **Options**
 
 ## License
 
-This project is licensed under the Apache-2.0 License. See the [LICENSE](LICENSE) file for details.
+Apache-2.0 — see [LICENSE](LICENSE).
 
 ## Author
 
