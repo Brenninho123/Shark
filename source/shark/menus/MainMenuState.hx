@@ -17,6 +17,7 @@ import shark.active.system.Body;
 import shark.active.system.BodyState;
 import shark.active.system.Head;
 import shark.audio.Audio;
+import shark.backend.Language;
 import shark.backend.Paths;
 import shark.functions.ChatEngine;
 import shark.menus.options.OptionsState;
@@ -77,7 +78,7 @@ class MainMenuState extends FlxState
 		createKelp();
 		bubbles = FlixelShark.createBubbleField(this, isMobile ? 8 : 14, COLOR_ACCENT);
 
-		titleText = FlixelShark.makeShadowText(0, isMobile ? 30 : 20, FlxG.width, "SHARK", isMobile ? 40 : 32, COLOR_FOAM, COLOR_ACCENT, CENTER);
+		titleText = FlixelShark.makeShadowText(0, isMobile ? 30 : 20, FlxG.width, Language.get("menu.title"), isMobile ? 40 : 32, COLOR_FOAM, COLOR_ACCENT, CENTER);
 		add(titleText);
 
 		body = new Body(FlxG.width / 2 - 35, titleText.y + titleText.height + 8, 70);
@@ -134,7 +135,7 @@ class MainMenuState extends FlxState
 		restoreHistory();
 
 		if (conversation.length == 0)
-			appendToHistory("Shark: " + Head.getWelcomeMessage());
+			appendToHistory(Language.get("app.name") + ": " + Head.getWelcomeMessage());
 
 		if (Paths.exists(Paths.music("ocean_ambient")))
 			Audio.playMusic("ocean_ambient");
@@ -345,7 +346,7 @@ class MainMenuState extends FlxState
 		{
 			thinkingElapsed += elapsed;
 			var dots:Int = Std.int(thinkingElapsed * 2) % 4;
-			thinkingText.text = "Shark is thinking" + StringTools.rpad("", ".", dots);
+			thinkingText.text = Language.get("menu.thinking") + StringTools.rpad("", ".", dots);
 		}
 
 		if (!isMobile && FlxG.keys.justPressed.ENTER && inputField.text.length > 0)
@@ -387,17 +388,17 @@ class MainMenuState extends FlxState
 
 	function sendMessage(message:String):Void
 	{
-		appendToHistory("You: " + message);
+		appendToHistory(Language.get("chat.you") + ": " + message);
 		inputField.text = "";
 		body.reactToMessageSent();
 
 		if (!isChatConfigured() && !isLocalCommand(message))
 		{
 			var reason:String = Main.isNetworkConfigTrusted
-				? "I'm not connected to an AI backend yet. Set ChatEngine.endpoint (and apiKey, if needed) before I can reply."
-				: "My backend endpoint was blocked for security reasons (invalid URL). Check assets/data/config.json.";
+				? Language.get("chat.notConfigured")
+				: Language.get("chat.blockedEndpoint");
 
-			appendToHistory("Shark: " + reason);
+			appendToHistory(Language.get("app.name") + ": " + reason);
 			body.reactToError();
 			return;
 		}
@@ -429,7 +430,7 @@ class MainMenuState extends FlxState
 
 	function onReply(reply:String):Void
 	{
-		appendToHistory("Shark: " + reply);
+		appendToHistory(Language.get("app.name") + ": " + reply);
 		Audio.play("message_receive");
 		sendButton.alive = Internet.isConnected;
 		body.reactToReplyReceived();
@@ -449,7 +450,7 @@ class MainMenuState extends FlxState
 		add(sprite);
 		imageSprites.push(sprite);
 
-		appendToHistory("Shark: [image generated]");
+		appendToHistory(Language.get("app.name") + ": " + Language.get("chat.imageGenerated"));
 		Audio.play("message_receive");
 		body.reactToReplyReceived();
 	}
@@ -479,7 +480,7 @@ class MainMenuState extends FlxState
 
 		imageSprites = [];
 
-		appendToHistory("Shark: " + Head.getWelcomeMessage());
+		appendToHistory(Language.get("app.name") + ": " + Head.getWelcomeMessage());
 		pulseButton(newChatButton);
 	}
 
