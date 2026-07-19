@@ -1,8 +1,12 @@
 package lime.manager;
 
 import flixel.FlxG;
+import shark.backend.ClientPrefs;
 import shark.online.Online;
 import shark.mobile.StorageUtil;
+import shark.ui.debug.CrasherLog;
+
+import Main;
 
 #if cpp
 import hxcpp.CPP;
@@ -23,6 +27,11 @@ class LimeManager
 	public static var currentQualityTier(default, null):Int = 2;
 	public static var averageFrameTimeMs(default, null):Float = 0;
 	public static var memoryUsageMB(default, null):Float = 0;
+	public static var isLowMemoryMode(default, null):Bool = false;
+	public static var isManualQuality(default, null):Bool = false;
+
+	public static var onQualityChanged:Int->Void;
+	public static var onLowMemoryModeChanged:Bool->Void;
 
 	static inline var QUALITY_HIGH:Int = 2;
 	static inline var QUALITY_MEDIUM:Int = 1;
@@ -30,6 +39,7 @@ class LimeManager
 
 	static inline var GC_CHECK_INTERVAL:Float = 10;
 	static inline var GC_MEMORY_THRESHOLD_MB:Float = 180;
+	static inline var CRITICAL_MEMORY_THRESHOLD_MB:Float = 280;
 
 	static var initialized:Bool = false;
 	static var frameTimeSamples:Array<Float> = [];
@@ -45,6 +55,7 @@ class LimeManager
 		resolvePlatform();
 		resolveCapabilities();
 		runPlatformSetup();
+		applyStoredPerformancePreference();
 		enableRuntimeOptimization();
 	}
 
@@ -115,6 +126,32 @@ class LimeManager
 			currentQualityTier = suggestedTier;
 	}
 
+	static function applyStoredPerformancePreference():Void
+	{
+		var mode:String = ClientPrefs.getString("performanceMode", "auto");
+
+		switch (mode)
+		{
+			case "low":
+				setQualityTier(QUALITY_LOW);
+				isManualQuality = true;
+			case "medium":
+				setQualityTier(QUALITY_MEDIUM);
+				isManualQuality = true;
+			case "high":
+				setQualityTier(QUALITY_HIGH);
+				isManualQuality = true;
+			default:
+				isManualQuality = false;
+		}
+	}
+
+	public static function setPerformanceMode(mode:String):Void
+	{
+		ClientPrefs.setString("performanceMode", mode);
+		applyStoredPerformancePreference();
+	}
+
 	static function setupMobileDefaults():Void
 	{
 		Online.onlineCheckInterval = 25;
@@ -155,6 +192,9 @@ class LimeManager
 
 	static function onPostUpdate():Void
 	{
+		if (!Main.isActive)
+			return;
+
 		trackFrameTime();
 		trackMemoryUsage(FlxG.elapsed);
 	}
@@ -176,7 +216,8 @@ class LimeManager
 
 		averageFrameTimeMs = total / frameTimeSamples.length;
 
-		evaluateQuality();
+		if (!isManualQuality)
+			evaluateQuality();
 	}
 
 	static function evaluateQuality():Void
@@ -194,6 +235,9 @@ class LimeManager
 
 	static function setQualityTier(tier:Int):Void
 	{
+		if (currentQualityTier == tier)
+			return;
+
 		currentQualityTier = tier;
 
 		switch (tier)
@@ -205,6 +249,9 @@ class LimeManager
 			case QUALITY_HIGH:
 				FlxG.drawFramerate = 60;
 		}
+
+		if (onQualityChanged != null)
+			onQualityChanged(tier);
 	}
 
 	static function trackMemoryUsage(elapsed:Float):Void
@@ -218,12 +265,28 @@ class LimeManager
 		gcCheckTimer = 0;
 		memoryUsageMB = CPP.getMemoryUsageMB();
 
+		setLowMemoryMode(memoryUsageMB > CRITICAL_MEMORY_THRESHOLD_MB);
+
 		if (memoryUsageMB > GC_MEMORY_THRESHOLD_MB)
 		{
 			shark.backend.Paths.clearVolatileCache();
 			CPP.collectGarbage(false);
 		}
 		#end
+	}
+
+	static function setLowMemoryMode(value:Bool):Void
+	{
+		if (isLowMemoryMode == value)
+			return;
+
+		isLowMemoryMode = value;
+
+		if (value)
+			CrasherLog.logWarning('Entered low-memory mode at ${Math.round(memoryUsageMB)}MB');
+
+		if (onLowMemoryModeChanged != null)
+			onLowMemoryModeChanged(value);
 	}
 
 	public static function getPlatformName():String
@@ -246,6 +309,8 @@ class LimeManager
 			default: "low";
 		}
 
-		return 'FPS avg: ${Std.int(1000 / Math.max(averageFrameTimeMs, 1))} | Quality: $qualityName | Mem: ${Std.int(memoryUsageMB)}MB';
+		var lowMemTag:String = isLowMemoryMode ? " | LOW MEM" : "";
+
+		return 'FPS avg: ${Std.int(1000 / Math.max(averageFrameTimeMs, 1))} | Quality: $qualityName${isManualQuality ? " (manual)" : ""} | Mem: ${Std.int(memoryUsageMB)}MB$lowMemTag';
 	}
 }
