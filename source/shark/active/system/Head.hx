@@ -2,13 +2,16 @@ package shark.active.system;
 
 import openfl.display.BitmapData;
 import shark.audio.Audio;
+import shark.backend.Language;
 import shark.functions.ChatEngine;
 import shark.functions.ImageCreator;
+import shark.online.User;
 import shark.online.manager.Internet;
 import shark.ui.security.Guard;
 
 #if cpp
 import lime.manager.LimeManager;
+import lime.manager.SutilLime;
 #end
 
 typedef CommandRequest = {
@@ -38,12 +41,6 @@ class Head
 	static var commands:Map<String, CommandHandler> = new Map();
 	static var commandsInitialized:Bool = false;
 
-	static var greetings:Array<String> = [
-		"Hey, I'm Shark! Ask me anything, or type /help to see what I can do.",
-		"Splash! Shark here, ready to chat. Type /help if you want a quick tour.",
-		"Hi, I'm Shark. Type !play if you're in the mood for a mini-game, or just say hello."
-	];
-
 	static function ensureCommandsInitialized():Void
 	{
 		if (commandsInitialized)
@@ -70,6 +67,8 @@ class Head
 		registerCommand("!unmute", handleUnmuteCommand);
 		registerCommand("/play", handlePlayCommand);
 		registerCommand("!play", handlePlayCommand);
+		registerCommand("/language", handleLanguageCommand);
+		registerCommand("!language", handleLanguageCommand);
 	}
 
 	public static function registerCommand(name:String, handler:CommandHandler):Void
@@ -80,7 +79,8 @@ class Head
 
 	public static function getWelcomeMessage():String
 	{
-		return greetings[Std.random(greetings.length)];
+		var index:Int = 1 + Std.random(3);
+		return Language.get('greeting.$index');
 	}
 
 	public static function think(input:String, onReply:String->Void, onError:String->Void, ?onImage:BitmapData->Void, ?onImageError:String->Void):Void
@@ -122,7 +122,7 @@ class Head
 			if (onRateLimited != null)
 				onRateLimited();
 
-			onError("Too many messages, please slow down");
+			onError(Language.get("chat.rateLimited"));
 			return;
 		}
 
@@ -174,7 +174,7 @@ class Head
 		if (request.args.length == 0)
 		{
 			if (request.onImageError != null)
-				request.onImageError("No image description provided");
+				request.onImageError(Language.get("head.noImageDescription"));
 
 			return;
 		}
@@ -200,20 +200,21 @@ class Head
 	static function handleResetCommand(request:CommandRequest):Void
 	{
 		reset();
-		request.onReply("Conversation reset. Starting fresh!");
+		request.onReply(Language.get("head.reset"));
 	}
 
 	static function handleHelpCommand(request:CommandRequest):Void
 	{
 		var lines:Array<String> = [
-			"Here's what I can do:",
-			"/image <description> - generate an image",
-			"/reset or /clear - start a new conversation",
-			"/play - open the mini-games menu",
-			"/mute or /unmute - toggle sound",
-			"/status - check my connection",
-			"/stats - see how much we've chatted",
-			"/about - learn more about me"
+			Language.get("head.helpIntro"),
+			Language.get("head.helpImage"),
+			Language.get("head.helpReset"),
+			Language.get("head.helpPlay"),
+			Language.get("head.helpMute"),
+			Language.get("head.helpStatus"),
+			Language.get("head.helpStats"),
+			Language.get("head.helpAbout"),
+			Language.get("head.helpLanguage")
 		];
 
 		request.onReply(lines.join("\n"));
@@ -221,18 +222,20 @@ class Head
 
 	static function handleAboutCommand(request:CommandRequest):Void
 	{
-		request.onReply("I'm Shark, an AI built with HaxeFlixel. I can chat, generate images, and I've got a few mini-games if you want a break.");
+		request.onReply(Language.get("head.about"));
 	}
 
 	static function handleStatusCommand(request:CommandRequest):Void
 	{
 		var lines:Array<String> = [];
 
-		lines.push('Connection: ${Internet.getStatusLabel()}');
-		lines.push('Chat configured: ${ChatEngine.endpoint != "" ? "yes" : "no"}');
+		var configured:String = ChatEngine.endpoint != "" ? Language.get("head.statusYes") : Language.get("head.statusNo");
+
+		lines.push('${Language.get("head.statusConnection")}: ${Internet.getStatusLabel()}');
+		lines.push('${Language.get("head.statusChatConfigured")}: $configured');
 
 		#if cpp
-		lines.push('Build: ${LimeManager.getBuildSummary()}');
+		lines.push('${Language.get("head.statusBuild")}: ${LimeManager.getBuildSummary()}');
 		#end
 
 		request.onReply(lines.join("\n"));
@@ -241,9 +244,11 @@ class Head
 	static function handleStatsCommand(request:CommandRequest):Void
 	{
 		var lines:Array<String> = [
-			'Messages exchanged: $totalMessages',
-			'Images generated: $totalImages',
-			'Flagged inputs: $totalFlagged'
+			'${Language.get("head.statsMessages")}: $totalMessages',
+			'${Language.get("head.statsImages")}: $totalImages',
+			'${Language.get("head.statsFlagged")}: $totalFlagged',
+			'${Language.get("head.statsLaunches")}: ${User.launchCount}',
+			'${Language.get("head.statsSession")}: ${Math.round(User.getSessionDurationSeconds())}s'
 		];
 
 		request.onReply(lines.join("\n"));
@@ -252,13 +257,13 @@ class Head
 	static function handleMuteCommand(request:CommandRequest):Void
 	{
 		Audio.setMuted(true);
-		request.onReply("Muted.");
+		request.onReply(Language.get("head.muted"));
 	}
 
 	static function handleUnmuteCommand(request:CommandRequest):Void
 	{
 		Audio.setMuted(false);
-		request.onReply("Unmuted.");
+		request.onReply(Language.get("head.unmuted"));
 	}
 
 	static function handlePlayCommand(request:CommandRequest):Void
@@ -266,7 +271,27 @@ class Head
 		if (onNavigate != null)
 			onNavigate("games");
 		else
-			request.onReply("Mini-games aren't available right now.");
+			request.onReply(Language.get("head.miniGamesUnavailable"));
+	}
+
+	static function handleLanguageCommand(request:CommandRequest):Void
+	{
+		var supportedList:String = Language.supportedLanguages.join(", ");
+		var code:String = StringTools.trim(request.args).toLowerCase();
+
+		if (code.length == 0)
+		{
+			request.onReply(Language.get("head.languageMissing", ["list" => supportedList]));
+			return;
+		}
+
+		if (!Language.setLanguage(code))
+		{
+			request.onReply(Language.get("head.languageInvalid", ["list" => supportedList]));
+			return;
+		}
+
+		request.onReply(Language.get("head.languageChanged", ["language" => Language.getLanguageName(code)]));
 	}
 
 	public static function reset():Void
