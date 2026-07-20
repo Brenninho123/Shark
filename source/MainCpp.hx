@@ -3,6 +3,7 @@ package;
 @:headerCode('
 #include <chrono>
 #include <thread>
+#include <ctime>
 ')
 class MainCpp
 {
@@ -63,6 +64,58 @@ class MainCpp
 		return lines.join(" | ");
 	}
 
+	public static function getCheckpointDelta(fromName:String, toName:String):Float
+	{
+		if (!checkpoints.exists(fromName) || !checkpoints.exists(toName))
+			return -1;
+
+		return checkpoints.get(toName) - checkpoints.get(fromName);
+	}
+
+	public static function getPhaseReport():String
+	{
+		var lines:Array<String> = [];
+
+		for (i in 1...checkpointOrder.length)
+		{
+			var fromName:String = checkpointOrder[i - 1];
+			var toName:String = checkpointOrder[i];
+			var delta:Float = getCheckpointDelta(fromName, toName);
+
+			lines.push('$fromName -> $toName: ${Math.round(delta)}ms');
+		}
+
+		return lines.join(" | ");
+	}
+
+	public static function getCpuTimeMs():Float
+	{
+		#if cpp
+		return untyped __cpp__("((double)std::clock() / CLOCKS_PER_SEC) * 1000.0");
+		#else
+		return Sys.cpuTime() * 1000;
+		#end
+	}
+
+	public static function getCpuUsageRatio():Float
+	{
+		var wallTime:Float = getTimeSinceNativeStartMs();
+
+		if (wallTime <= 0)
+			return 0;
+
+		var coreCount:Int = 1;
+
+		#if cpp
+		coreCount = untyped __cpp__("(int)std::thread::hardware_concurrency()");
+
+		if (coreCount <= 0)
+			coreCount = 1;
+		#end
+
+		return getCpuTimeMs() / (wallTime * coreCount);
+	}
+
 	public static function is64Bit():Bool
 	{
 		#if cpp
@@ -79,5 +132,51 @@ class MainCpp
 		#else
 		return 0;
 		#end
+	}
+
+	public static function getCpuArchitecture():String
+	{
+		#if cpp
+		return untyped __cpp__("
+			#if defined(__aarch64__) || defined(_M_ARM64)
+				\"arm64\"
+			#elif defined(__arm__) || defined(_M_ARM)
+				\"arm\"
+			#elif defined(__x86_64__) || defined(_M_X64)
+				\"x86_64\"
+			#elif defined(__i386__) || defined(_M_IX86)
+				\"x86\"
+			#else
+				\"unknown\"
+			#endif
+		");
+		#else
+		return "unknown";
+		#end
+	}
+
+	public static function getCompilerName():String
+	{
+		#if cpp
+		return untyped __cpp__("
+			#if defined(__clang__)
+				\"clang\"
+			#elif defined(__GNUC__)
+				\"gcc\"
+			#elif defined(_MSC_VER)
+				\"msvc\"
+			#else
+				\"unknown\"
+			#endif
+		");
+		#else
+		return "unknown";
+		#end
+	}
+
+	public static function clearCheckpoints():Void
+	{
+		checkpoints = new Map();
+		checkpointOrder = [];
 	}
 }
