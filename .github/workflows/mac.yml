@@ -65,12 +65,17 @@ jobs:
 
       - name: List build output for debugging
         if: always()
-        run: find export/mac -maxdepth 4 -type d
+        run: |
+          echo "--- top-level repo contents ---"
+          ls -la
+          echo "--- export directory (if any) ---"
+          find export -maxdepth 4 2>/dev/null || echo "no export directory found"
 
       - name: Upload artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Shark-macOS
-          path: export/mac
+          path: export
           retention-days: 7
+          if-no-files-found: warn
