@@ -13,7 +13,9 @@ import shark.mobile.StorageUtil;
 import shark.online.Network;
 import shark.online.NetworkResponse;
 import shark.online.Online;
+import shark.online.User;
 import shark.ui.security.Guard;
+import lime.manager.LimeManager;
 
 typedef ImageRequest = {
 	prompt:String,
@@ -37,13 +39,35 @@ class ImageCreator
 	public static var autoSaveToStorage:Bool = true;
 	public static var cacheEnabled:Bool = true;
 	public static var decodeTimeoutMs:Int = 15000;
+	public static var maxCacheEntries:Int = 30;
 
 	static var queue:Array<ImageRequest> = [];
 	static var isBusy:Bool = false;
 	static var lastRequestTime:Float = 0;
 	static var currentToken:Int = 0;
+	static var initialized:Bool = false;
 
 	static var imageCache:Map<String, BitmapData> = new Map();
+	static var cacheOrder:Array<String> = [];
+
+	public static function initialize():Void
+	{
+		if (initialized)
+			return;
+
+		initialized = true;
+
+		var previousCallback:Bool->Void = LimeManager.onLowMemoryModeChanged;
+
+		LimeManager.onLowMemoryModeChanged = function(isLow:Bool):Void
+		{
+			if (previousCallback != null)
+				previousCallback(isLow);
+
+			if (isLow)
+				clearCache();
+		};
+	}
 
 	public static function generate(prompt:String, onComplete:BitmapData->Void, onError:String->Void, width:Int = 512, height:Int = 512):Void
 	{
@@ -131,6 +155,9 @@ class ImageCreator
 		if (model != "")
 			Reflect.setField(payload, "model", model);
 
+		if (User.userId != null)
+			Reflect.setField(payload, "user", User.userId);
+
 		var headers:Map<String, String> = new Map();
 
 		if (apiKey != "")
@@ -159,7 +186,7 @@ class ImageCreator
 						return;
 
 					if (cacheEnabled)
-						imageCache.set(buildCacheKey(request.prompt, request.width, request.height), bitmap);
+						cacheImage(buildCacheKey(request.prompt, request.width, request.height), bitmap);
 
 					if (autoSaveToStorage)
 						StorageUtil.saveImage(bitmap, generateFilename(request.prompt), function(_):Void {}, function(_):Void {}, request.prompt);
@@ -253,8 +280,23 @@ class ImageCreator
 		loader.loadBytes(byteArray);
 	}
 
+	static function cacheImage(key:String, bitmap:BitmapData):Void
+	{
+		if (!imageCache.exists(key))
+			cacheOrder.push(key);
+
+		imageCache.set(key, bitmap);
+
+		while (cacheOrder.length > maxCacheEntries)
+		{
+			var oldestKey:String = cacheOrder.shift();
+			imageCache.remove(oldestKey);
+		}
+	}
+
 	public static function clearCache():Void
 	{
 		imageCache = new Map();
+		cacheOrder = [];
 	}
 }
