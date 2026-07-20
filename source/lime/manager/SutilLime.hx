@@ -138,6 +138,7 @@ class SutilLime
 		lines.push('Online: ${Online.isOnline} (uptime ${Math.round(Online.getUptimePercentage())}%)');
 		lines.push('Time since native start: ${Math.round(MainCpp.getTimeSinceNativeStartMs())}ms');
 		lines.push('Boot checkpoints: ${MainCpp.getCheckpointReport()}');
+		lines.push('Arch: ${MainCpp.getCpuArchitecture()} (${MainCpp.is64Bit() ? "64-bit" : "32-bit"}) | Compiler: ${MainCpp.getCompilerName()}');
 
 		#if cpp
 		lines.push('Memory: ${Math.round(CPP.getMemoryUsageMB())}MB / ${Math.round(CPP.getMemoryReservedMB())}MB');
