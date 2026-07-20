@@ -2,6 +2,7 @@ package shark.audio;
 
 import flixel.FlxG;
 import flixel.sound.FlxSound;
+import shark.backend.ClientPrefs;
 import shark.backend.Paths;
 
 class Audio
@@ -12,6 +13,22 @@ class Audio
 
 	static var currentMusic:FlxSound;
 	static var currentMusicKey:String;
+	static var initialized:Bool = false;
+
+	public static function initialize():Void
+	{
+		if (initialized)
+			return;
+
+		initialized = true;
+
+		musicVolume = ClientPrefs.musicVolume;
+		soundVolume = ClientPrefs.soundVolume;
+		isMuted = ClientPrefs.muted;
+
+		if (FlxG.sound != null)
+			FlxG.sound.muted = isMuted;
+	}
 
 	public static function playMusic(key:String, loop:Bool = true, fadeInDuration:Float = 1):Void
 	{
@@ -125,6 +142,11 @@ class Audio
 
 		if (currentMusic != null)
 			currentMusic.volume = isMuted ? 0 : musicVolume;
+
+		if (FlxG.sound != null)
+			FlxG.sound.muted = isMuted;
+
+		ClientPrefs.muted = isMuted;
 	}
 
 	public static function toggleMute():Bool
@@ -140,12 +162,19 @@ class Audio
 		if (currentMusic != null && !isMuted)
 			currentMusic.volume = musicVolume;
 
+		if (initialized)
+			ClientPrefs.musicVolume = musicVolume;
+
 		return musicVolume;
 	}
 
 	static function set_soundVolume(value:Float):Float
 	{
 		soundVolume = clampVolume(value);
+
+		if (initialized)
+			ClientPrefs.soundVolume = soundVolume;
+
 		return soundVolume;
 	}
 
