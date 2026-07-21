@@ -4,22 +4,40 @@ import hscript.Parser;
 import hscript.Interp;
 import hscript.Expr;
 import shark.ui.security.Guard;
+import shark.ui.debug.CrasherLog;
+
+#if cpp
+import hxcpp.CPP;
+#end
 
 typedef ScriptResult = {
 	success:Bool,
 	value:Dynamic,
-	?error:String
+	?error:String,
+	?executionTimeMs:Float
+}
+
+typedef ScriptHistoryEntry = {
+	codeSnippet:String,
+	success:Bool,
+	executionTimeMs:Float,
+	timestamp:Float
 }
 
 class SharkScript
 {
 	public static var maxScriptLength:Int = 5000;
+	public static var slowScriptThresholdMs:Float = 50;
+	public static var rateLimitBucket:String = "hscript";
+	public static var enforceRateLimit:Bool = true;
+	public static inline var MAX_HISTORY:Int = 20;
 
 	var parser:Parser;
 	var interp:Interp;
 	var exposedVariables:Map<String, Dynamic> = new Map();
 	var astCache:Map<String, Expr> = new Map();
 	var output:Array<String> = [];
+	var history:Array<ScriptHistoryEntry> = [];
 
 	public function new()
 	{
@@ -47,6 +65,12 @@ class SharkScript
 		interp.variables.set(name, value);
 	}
 
+	public function exposeMultiple(values:Map<String, Dynamic>):Void
+	{
+		for (name => value in values)
+			expose(name, value);
+	}
+
 	public function unexpose(name:String):Void
 	{
 		exposedVariables.remove(name);
@@ -55,13 +79,18 @@ class SharkScript
 
 	public function run(code:String):ScriptResult
 	{
+		if (enforceRateLimit && !Guard.checkAndRegister(rateLimitBucket))
+			return {success: false, value: null, error: "Too many scripts running, please slow down", executionTimeMs: 0};
+
 		var sanitized:String = Guard.sanitizeInput(code);
 
 		if (sanitized.length == 0)
-			return {success: false, value: null, error: "Empty script"};
+			return {success: false, value: null, error: "Empty script", executionTimeMs: 0};
 
 		if (sanitized.length > maxScriptLength)
-			return {success: false, value: null, error: 'Script exceeds $maxScriptLength characters'};
+			return {success: false, value: null, error: 'Script exceeds $maxScriptLength characters', executionTimeMs: 0};
+
+		var startTime:Float = nowMs();
 
 		try
 		{
@@ -81,17 +110,62 @@ class SharkScript
 			}
 
 			var value:Dynamic = interp.execute(expr);
+			var elapsed:Float = nowMs() - startTime;
 
-			return {success: true, value: value};
+			recordHistory(sanitized, true, elapsed);
+			warnIfSlow(elapsed);
+
+			return {success: true, value: value, executionTimeMs: elapsed};
 		}
 		catch (e:hscript.Expr.Error)
 		{
-			return {success: false, value: null, error: 'Parse error: ${Std.string(e)}'};
+			var elapsed:Float = nowMs() - startTime;
+			recordHistory(sanitized, false, elapsed);
+
+			return {success: false, value: null, error: 'Parse error: ${Std.string(e)}', executionTimeMs: elapsed};
 		}
 		catch (e:Dynamic)
 		{
-			return {success: false, value: null, error: Std.string(e)};
+			var elapsed:Float = nowMs() - startTime;
+			recordHistory(sanitized, false, elapsed);
+
+			return {success: false, value: null, error: Std.string(e), executionTimeMs: elapsed};
 		}
+	}
+
+	static function nowMs():Float
+	{
+		#if cpp
+		return CPP.getHighResTimeMs();
+		#else
+		return Sys.time() * 1000;
+		#end
+	}
+
+	function warnIfSlow(elapsedMs:Float):Void
+	{
+		if (elapsedMs > slowScriptThresholdMs)
+			CrasherLog.logWarning('Slow hscript execution: ${Math.round(elapsedMs)}ms');
+	}
+
+	function recordHistory(code:String, success:Bool, elapsedMs:Float):Void
+	{
+		var snippet:String = code.length > 60 ? code.substr(0, 60) + "..." : code;
+
+		history.push({
+			codeSnippet: snippet,
+			success: success,
+			executionTimeMs: elapsedMs,
+			timestamp: Date.now().getTime() / 1000
+		});
+
+		if (history.length > MAX_HISTORY)
+			history.shift();
+	}
+
+	public function getHistory():Array<ScriptHistoryEntry>
+	{
+		return history.copy();
 	}
 
 	public function getOutput():Array<String>
@@ -102,7 +176,7 @@ class SharkScript
 	function hashScript(code:String):String
 	{
 		#if cpp
-		return Std.string(hxcpp.CPP.fnv1aHash(code));
+		return Std.string(CPP.fnv1aHash(code));
 		#else
 		return code;
 		#end
@@ -119,5 +193,10 @@ class SharkScript
 	public function clearCache():Void
 	{
 		astCache = new Map();
+	}
+
+	public function clearHistory():Void
+	{
+		history = [];
 	}
 }
