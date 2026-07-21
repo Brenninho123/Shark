@@ -17,11 +17,13 @@ jobs:
       - name: Install Haxe
         run: |
           apt-get update
-          apt-get install -y curl tar
+          apt-get install -y curl tar neko
           curl -L -o haxe.tar.gz https://github.com/HaxeFoundation/haxe/releases/download/4.3.6/haxe-4.3.6-linux64.tar.gz
           mkdir -p /opt/haxe
           tar -xzf haxe.tar.gz -C /opt/haxe --strip-components=1
           echo "/opt/haxe" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=/opt/haxe:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          export LD_LIBRARY_PATH="/opt/haxe:$LD_LIBRARY_PATH"
           mkdir -p ~/haxelib
           /opt/haxe/haxelib setup ~/haxelib
 
