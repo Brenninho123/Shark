@@ -27,10 +27,16 @@ jobs:
           mkdir -p ~/haxelib
           /opt/haxe/haxelib setup ~/haxelib
 
-      - name: Install custom hxcpp-nx fork
+      - name: Install hmm
+        run: haxelib install hmm
+
+      - name: Install project dependencies (standard versions from hmm.json)
+        run: haxelib run hmm install
+
+      - name: Install custom hxcpp-nx fork (overrides standard hxcpp for this build only)
         run: haxelib git hxcpp https://github.com/Slushi-Github/hxcpp-nx.git
 
-      - name: Install Lime-NX
+      - name: Install Lime-NX (overrides standard lime for this build only)
         run: haxelib git lime https://github.com/Slushi-Github/lime-nx.git
 
       - name: Install HaxeNXCompiler
@@ -38,9 +44,6 @@ jobs:
 
       - name: Install hx_libnx bindings
         run: haxelib git hx_libnx https://github.com/Slushi-Github/hx_libnx.git
-
-      - name: Install project dependencies
-        run: haxelib run hmm install
 
       - name: List HaxeNXCompiler usage (diagnostic)
         run: |
