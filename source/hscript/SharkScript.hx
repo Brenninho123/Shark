@@ -168,6 +168,31 @@ class SharkScript
 		return history.copy();
 	}
 
+	public function callFunction(name:String, ?args:Array<Dynamic>):Dynamic
+	{
+		if (!interp.variables.exists(name))
+			return null;
+
+		var fn:Dynamic = interp.variables.get(name);
+
+		if (!Reflect.isFunction(fn))
+			return null;
+
+		try
+		{
+			return Reflect.callMethod(null, fn, args != null ? args : []);
+		}
+		catch (e:Dynamic)
+		{
+			return null;
+		}
+	}
+
+	public function hasFunction(name:String):Bool
+	{
+		return interp.variables.exists(name) && Reflect.isFunction(interp.variables.get(name));
+	}
+
 	public function getOutput():Array<String>
 	{
 		return output.copy();
