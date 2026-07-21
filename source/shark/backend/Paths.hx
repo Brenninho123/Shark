@@ -29,6 +29,28 @@ class Paths
 		return '$ASSET_ROOT/images/$key.png';
 	}
 
+	public static function astcVariantPath(key:String):String
+	{
+		return '$ASSET_ROOT/images/astc/$key.astc';
+	}
+
+	public static var preferCompressedTextures(get, never):Bool;
+
+	static function get_preferCompressedTextures():Bool
+	{
+		return FlxG.onMobile;
+	}
+
+	public static function hasAstcVariant(key:String):Bool
+	{
+		return exists(astcVariantPath(key));
+	}
+
+	public static function shouldUseAstc(key:String):Bool
+	{
+		return preferCompressedTextures && hasAstcVariant(key);
+	}
+
 	public static function sound(key:String):String
 	{
 		return '$ASSET_ROOT/sounds/$key.$soundExtension';
@@ -65,10 +87,13 @@ class Paths
 		#end
 	}
 
-	public static function getGraphic(key:String, persist:Bool = false):FlxGraphic
+	public static function getGraphic(key:String, persist:Bool = false, checkCompressed:Bool = false):FlxGraphic
 	{
 		if (graphicCache.exists(key))
 			return graphicCache.get(key);
+
+		if (checkCompressed && shouldUseAstc(key))
+			shark.ui.debug.CrasherLog.logWarning('ASTC variant found for "$key" but GPU texture upload is not implemented yet; using PNG fallback');
 
 		var path:String = image(key);
 
