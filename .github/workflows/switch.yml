@@ -1,0 +1,66 @@
+name: Build Switch (Experimental)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-switch:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
+    timeout-minutes: 45
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Haxe
+        run: |
+          apt-get update
+          apt-get install -y curl tar
+          curl -L -o haxe.tar.gz https://github.com/HaxeFoundation/haxe/releases/download/4.3.6/haxe-4.3.6-linux64.tar.gz
+          mkdir -p /opt/haxe
+          tar -xzf haxe.tar.gz -C /opt/haxe --strip-components=1
+          echo "/opt/haxe" >> "$GITHUB_PATH"
+          mkdir -p ~/haxelib
+          /opt/haxe/haxelib setup ~/haxelib
+
+      - name: Install custom hxcpp-nx fork
+        run: haxelib git hxcpp https://github.com/Slushi-Github/hxcpp-nx.git
+
+      - name: Install Lime-NX
+        run: haxelib git lime https://github.com/Slushi-Github/lime-nx.git
+
+      - name: Install HaxeNXCompiler
+        run: haxelib git HaxeNXCompiler https://github.com/Slushi-Github/HaxeNXCompiler.git
+
+      - name: Install hx_libnx bindings
+        run: haxelib git hx_libnx https://github.com/Slushi-Github/hx_libnx.git
+
+      - name: Install project dependencies
+        run: haxelib run hmm install
+
+      - name: List HaxeNXCompiler usage (diagnostic)
+        run: |
+          haxelib path HaxeNXCompiler || true
+          find "$(haxelib path HaxeNXCompiler 2>/dev/null | head -n1)" -maxdepth 2 2>/dev/null || true
+
+      - name: Attempt Switch build
+        id: build
+        run: |
+          echo "This step is a best-effort attempt and is expected to need adjustment."
+          echo "See HaxeNXCompiler's GetStarted guide for the exact invocation:"
+          echo "https://github.com/Slushi-Github/HaxeNXCompiler/blob/main/docs/guides/GetStarted.md"
+          haxelib run HaxeNXCompiler Project.xml || echo "Build command likely needs adjustment - see logs above"
+
+      - name: Upload whatever was produced
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-Switch-experimental
+          path: |
+            export
+            *.nro
+            *.nsp
+          if-no-files-found: warn
+          retention-days: 7
