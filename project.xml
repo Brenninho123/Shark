@@ -8,6 +8,7 @@
 	<window if="mobile" orientation="landscape" fullscreen="true" allow-shaders="true" />
 	<window if="html5" resizable="true" allow-high-dpi="true" />
 	<window if="desktop" resizable="true" />
+	<window if="switch" width="1280" height="720" fullscreen="true" />
 
 	<source path="source" />
 
@@ -16,7 +17,8 @@
 	<haxelib name="flixel-addons" />
 	<haxelib name="flixel-ui" />
 	<haxelib name="hscript" />
-	<haxelib name="hxdiscord_rpc" if="cpp" />
+	<haxelib name="hxdiscord_rpc" if="cpp" unless="switch" />
+	<haxelib name="hx_libnx" if="switch" />
 	<haxelib name="hxcpp" if="cpp" />
 
 	<assets path="assets/images" rename="assets/images" />
@@ -62,5 +64,7 @@
 	<config:html5 title="Shark" />
 	<config:html5 background-color="#00111F" />
 	<config:html5 vertical-sync="false" />
+
+	<config:switch title="Shark" author="Brenninho" version="0.1.0" />
 
 </project>
