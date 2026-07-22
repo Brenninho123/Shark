@@ -53,6 +53,7 @@ class Boost
 		originalDrawFramerate = FlxG.drawFramerate;
 		originalUpdateFramerate = FlxG.updateFramerate;
 
+		LimeManager.maxFramerate = maxSupportedFPS;
 		LimeManager.setPerformanceMode("high");
 		setTargetFPS(maxSupportedFPS);
 	}
@@ -64,6 +65,7 @@ class Boost
 
 		isBoostActive = false;
 
+		LimeManager.maxFramerate = originalDrawFramerate;
 		LimeManager.setPerformanceMode("auto");
 
 		FlxG.drawFramerate = originalDrawFramerate;
