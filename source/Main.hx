@@ -33,7 +33,7 @@ import shark.ui.discord.Discord;
 import shark.ui.input.Cursor;
 import shark.ui.security.Guard;
 import git.resolution.Resolution4K;
-import mobile.utils.TouchUtil;
+import shark.mobile.utils.TouchUtil;
 
 class Main extends Sprite
 {
