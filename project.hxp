@@ -149,9 +149,6 @@ class Project extends HXProject
 		config.set("android.minimum-sdk-version", "21");
 		config.set("android.install-location", "auto");
 		config.set("android.window-soft-input-mode", "adjustResize");
-
-		if (!debug)
-			certificate = new Certificate("Certificates/android.keystore", "android", "android", "android");
 	}
 
 	function setupIOS():Void
