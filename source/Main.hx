@@ -18,6 +18,8 @@ import openfl.events.UncaughtErrorEvent;
 import openfl.system.Capabilities;
 import shark.active.system.Head;
 import shark.audio.Audio;
+import shark.backend.ClientPrefs;
+import shark.backend.Language;
 import shark.backend.Paths;
 import shark.functions.ChatEngine;
 import shark.functions.ImageCreator;
@@ -30,6 +32,8 @@ import shark.ui.debug.DebugDisplay;
 import shark.ui.discord.Discord;
 import shark.ui.input.Cursor;
 import shark.ui.security.Guard;
+import git.resolution.Resolution4K;
+import mobile.utils.TouchUtil;
 
 class Main extends Sprite
 {
@@ -77,7 +81,13 @@ class Main extends Sprite
 		setupInput();
 		setupLocale();
 		setupSave();
+
+		ClientPrefs.initialize();
+		Language.initialize();
+		Audio.initialize();
+		Resolution4K.initialize();
 		User.initialize();
+
 		setupNetworkConfig();
 		setupSecurity();
 		setupConnectivity();
@@ -87,15 +97,27 @@ class Main extends Sprite
 		LimeShark.initialize();
 		MainCpp.recordCheckpoint("lime_shark_ready");
 
+		ImageCreator.initialize();
+
 		setupGame();
 		MainCpp.recordCheckpoint("flixel_game_ready");
 
+		setupTouch();
 		setupDiscord();
-
 		setupDebugOverlay();
 
 		#if debug
 		addChild(new FPS(10, 10, 0xFFFFFF));
+		#end
+	}
+
+	function setupTouch():Void
+	{
+		#if FLX_TOUCH
+		FlxG.signals.postUpdate.add(function():Void
+		{
+			TouchUtil.update(FlxG.elapsed);
+		});
 		#end
 	}
 
