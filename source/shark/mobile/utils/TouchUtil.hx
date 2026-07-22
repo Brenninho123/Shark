@@ -1,4 +1,4 @@
-package mobile.utils;
+package shark.mobile.utils;
 
 import flixel.FlxG;
 
