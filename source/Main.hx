@@ -156,8 +156,28 @@ class Main extends Sprite
 
 	function setupLocale():Void
 	{
-		var raw:String = Capabilities.language;
+		var raw:String = getNativeLocale();
+
+		if (raw == null || raw.length == 0)
+			raw = Capabilities.language;
+
 		systemLanguage = raw != null && raw.length >= 2 ? raw.substr(0, 2).toLowerCase() : "en";
+	}
+
+	function getNativeLocale():String
+	{
+		#if (android || ios || mac || html5)
+		try
+		{
+			return extension.locale.Locale.getSmartLangCode();
+		}
+		catch (e:Dynamic)
+		{
+			return null;
+		}
+		#else
+		return null;
+		#end
 	}
 
 	function setupSave():Void
