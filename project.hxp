@@ -75,6 +75,7 @@ class Project extends HXProject
 
 	function setupHaxelibs():Void
 	{
+		haxelibs.push(new Haxelib("lime"));
 		haxelibs.push(new Haxelib("openfl"));
 		haxelibs.push(new Haxelib("flixel"));
 		haxelibs.push(new Haxelib("flixel-addons"));
@@ -87,8 +88,8 @@ class Project extends HXProject
 
 	function setupAssets():Void
 	{
-		assets.push(new Asset("assets/images", "assets/images", AssetType.BINARY));
-		assets.push(new Asset("assets/data", "assets/data", AssetType.TEXT));
+		includeAssets("assets/images", "assets/images");
+		includeAssets("assets/data", "assets/data");
 	}
 
 	function setupIcon():Void
