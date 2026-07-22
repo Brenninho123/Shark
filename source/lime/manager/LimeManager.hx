@@ -29,6 +29,7 @@ class LimeManager
 	public static var memoryUsageMB(default, null):Float = 0;
 	public static var isLowMemoryMode(default, null):Bool = false;
 	public static var isManualQuality(default, null):Bool = false;
+	public static var maxFramerate:Int = 60;
 
 	public static var onQualityChanged:Int->Void;
 	public static var onLowMemoryModeChanged:Bool->Void;
@@ -243,11 +244,11 @@ class LimeManager
 		switch (tier)
 		{
 			case QUALITY_LOW:
-				FlxG.drawFramerate = Std.int(Math.min(FlxG.drawFramerate, 30));
+				FlxG.drawFramerate = Std.int(Math.min(FlxG.drawFramerate, maxFramerate * 0.5));
 			case QUALITY_MEDIUM:
-				FlxG.drawFramerate = Std.int(Math.min(FlxG.drawFramerate, 45));
+				FlxG.drawFramerate = Std.int(Math.min(FlxG.drawFramerate, maxFramerate * 0.75));
 			case QUALITY_HIGH:
-				FlxG.drawFramerate = 60;
+				FlxG.drawFramerate = maxFramerate;
 		}
 
 		if (onQualityChanged != null)
