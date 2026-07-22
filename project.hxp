@@ -81,6 +81,7 @@ class Project extends HXProject
 		haxelibs.push(new Haxelib("flixel-addons"));
 		haxelibs.push(new Haxelib("flixel-ui"));
 		haxelibs.push(new Haxelib("hscript"));
+		haxelibs.push(new Haxelib("extension-locale"));
 
 		if (target != HTML5)
 			haxelibs.push(new Haxelib("hxdiscord_rpc"));
