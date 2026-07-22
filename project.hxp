@@ -93,6 +93,9 @@ class Project extends HXProject
 
 		if (sys.FileSystem.exists("assets/fonts") && sys.FileSystem.readDirectory("assets/fonts").length > 0)
 			includeAssets("assets/fonts", "assets/fonts");
+
+		if (sys.FileSystem.exists("assets/shaders") && sys.FileSystem.readDirectory("assets/shaders").length > 0)
+			includeAssets("assets/shaders", "assets/shaders");
 	}
 
 	function setupIcon():Void
