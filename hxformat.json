@@ -1,0 +1,26 @@
+{
+	"lineEnds": "lf",
+	"indentation": {
+		"character": "\t"
+	},
+	"wrapping": {
+		"maxLineLength": 200
+	},
+	"whitespace": {
+		"binopPolicy": "aroundAllBinops",
+		"issignPolicy": "none"
+	},
+	"emptyLines": {
+		"maxEmptyLinesInFile": 2,
+		"maxEmptyLinesInBlocks": 1
+	},
+	"braces": {
+		"classBraceStyle": "nextLine",
+		"functionBraceStyle": "nextLine",
+		"ifBraceStyle": "nextLine",
+		"forBraceStyle": "nextLine",
+		"whileBraceStyle": "nextLine",
+		"tryBraceStyle": "nextLine",
+		"switchBraceStyle": "nextLine"
+	}
+}
