@@ -179,4 +179,39 @@ class MainCpp
 		checkpoints = new Map();
 		checkpointOrder = [];
 	}
+
+	public static function preciseSleepMs(milliseconds:Float):Void
+	{
+		if (milliseconds <= 0)
+			return;
+
+		#if cpp
+		untyped __cpp__("
+			std::this_thread::sleep_for(std::chrono::microseconds((long long)({0} * 1000.0)))
+		", milliseconds);
+		#else
+		Sys.sleep(milliseconds / 1000);
+		#end
+	}
+
+	public static function preciseWaitUntil(targetTimeMs:Float, spinThresholdMs:Float = 2):Void
+	{
+		var remaining:Float = targetTimeMs - nowMs();
+
+		if (remaining <= 0)
+			return;
+
+		if (remaining > spinThresholdMs)
+			preciseSleepMs(remaining - spinThresholdMs);
+
+		while (nowMs() < targetTimeMs) {}
+	}
+
+	public static function getFrameBudgetMs(targetFps:Int):Float
+	{
+		if (targetFps <= 0)
+			return 0;
+
+		return 1000 / targetFps;
+	}
 }
