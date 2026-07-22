@@ -12,6 +12,8 @@ import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
 import openfl.display.BitmapData;
 import flixel.FlixelShark;
+import git.graphic.GraphicGit;
+import git.resolution.Resolution4K;
 import shark.active.GameState;
 import shark.active.system.Body;
 import shark.active.system.BodyState;
@@ -23,6 +25,7 @@ import shark.functions.ChatEngine;
 import shark.menus.options.OptionsState;
 import shark.online.Online;
 import shark.online.manager.Internet;
+import shark.shaders.WaterShader;
 import lime.manager.LimeManager;
 
 import Main;
@@ -52,6 +55,7 @@ class MainMenuState extends FlxState
 	var statusText:FlxText;
 	var thinkingText:FlxText;
 	var body:Body;
+	var waterShader:WaterShader;
 
 	var lightRays:Array<FlxSprite> = [];
 	var kelpBlades:Array<{sprite:FlxSprite, offset:Float, speed:Float}> = [];
@@ -93,19 +97,21 @@ class MainMenuState extends FlxState
 		var historyTop:Int = Std.int(body.y + 90);
 		var historyHeight:Int = FlxG.height - historyTop - (isMobile ? 100 : 70);
 
-		var historyBackdrop = FlixelShark.makeSprite(historyPad - 10, historyTop, FlxG.width - (historyPad - 10) * 2, historyHeight, COLOR_MID, 0.3);
+		var historyBackdrop = GraphicGit.makeRoundedRectSprite(historyPad - 10, historyTop, FlxG.width - (historyPad - 10) * 2, historyHeight, COLOR_MID, 14,
+			0.35);
 		add(historyBackdrop);
 
-		var historyBorder = FlixelShark.makeSprite(historyPad - 10, historyTop, FlxG.width - (historyPad - 10) * 2, 2, COLOR_ACCENT, 0.6);
+		var historyBorder = new FlxSprite(historyPad - 10, historyTop);
+		historyBorder.pixels = GraphicGit.createRoundedRectBorder(Std.int(FlxG.width - (historyPad - 10) * 2), historyHeight, COLOR_ACCENT, 14, 2, 0.6);
 		add(historyBorder);
 
 		historyText = FlixelShark.makeText(historyPad, historyTop + 10, FlxG.width - historyPad * 2, "", isMobile ? 20 : 16, COLOR_FOAM, LEFT);
 		add(historyText);
 
-		var inputHeight:Int = isMobile ? 60 : 40;
-		var inputWidth:Int = isMobile ? FlxG.width - 160 : FlxG.width - 140;
+		var inputHeight:Int = Resolution4K.scaledInt(isMobile ? 60 : 40);
+		var inputWidth:Int = isMobile ? FlxG.width - Resolution4K.scaledInt(160) : FlxG.width - Resolution4K.scaledInt(140);
 
-		inputField = new FlxInputText(historyPad, FlxG.height - inputHeight - 20, inputWidth, "", isMobile ? 20 : 16, COLOR_FOAM);
+		inputField = new FlxInputText(historyPad, FlxG.height - inputHeight - 20, inputWidth, "", Resolution4K.scaledInt(isMobile ? 20 : 16), COLOR_FOAM);
 		inputField.backgroundColor = COLOR_MID;
 		inputField.borderColor = COLOR_ACCENT;
 		inputField.borderStyle = OUTLINE;
@@ -115,7 +121,7 @@ class MainMenuState extends FlxState
 		sendButton = createIconButton(historyPad + inputWidth + 10, FlxG.height - inputHeight - 20, inputHeight, inputHeight, COLOR_WAVE, onSendPressed);
 		addSendIcon(sendButton);
 
-		var topBarSize:Int = isMobile ? 44 : 32;
+		var topBarSize:Int = Resolution4K.scaledInt(isMobile ? 44 : 32);
 
 		muteButton = createIconButton(20, 12, topBarSize, topBarSize, COLOR_MID, onMutePressed);
 		muteIcon = addMuteIcon(muteButton, Audio.isMuted);
@@ -294,9 +300,12 @@ class MainMenuState extends FlxState
 	{
 		var colors:Array<FlxColor> = [COLOR_MID, COLOR_WAVE, COLOR_ACCENT];
 
+		waterShader = new WaterShader();
+
 		for (i in 0...colors.length)
 		{
 			var wave = FlixelShark.makeStaticSprite(0, FlxG.height - 40 - (i * 30), FlxG.width, 60, colors[i], 0.22);
+			wave.shader = waterShader;
 			add(wave);
 
 			FlxTween.tween(wave, {x: -40}, 3 + i, {
@@ -335,6 +344,9 @@ class MainMenuState extends FlxState
 		super.update(elapsed);
 
 		FlixelShark.updateBubbleField(bubbles, elapsed);
+
+		if (waterShader != null)
+			waterShader.update(elapsed);
 
 		for (blade in kelpBlades)
 		{
