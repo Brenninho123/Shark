@@ -29,7 +29,7 @@ class MainCpp
 			).count() / 1000.0
 		");
 		#else
-		return Sys.time() * 1000;
+		return Date.now().getTime();
 		#end
 	}
 
@@ -92,8 +92,10 @@ class MainCpp
 	{
 		#if cpp
 		return untyped __cpp__("((double)std::clock() / CLOCKS_PER_SEC) * 1000.0");
-		#else
+		#elseif sys
 		return Sys.cpuTime() * 1000;
+		#else
+		return 0;
 		#end
 	}
 
@@ -189,13 +191,16 @@ class MainCpp
 		untyped __cpp__("
 			std::this_thread::sleep_for(std::chrono::microseconds((long long)({0} * 1000.0)))
 		", milliseconds);
-		#else
+		#elseif sys
 		Sys.sleep(milliseconds / 1000);
 		#end
 	}
 
 	public static function preciseWaitUntil(targetTimeMs:Float, spinThresholdMs:Float = 2):Void
 	{
+		#if html5
+		return;
+		#else
 		var remaining:Float = targetTimeMs - nowMs();
 
 		if (remaining <= 0)
@@ -205,6 +210,7 @@ class MainCpp
 			preciseSleepMs(remaining - spinThresholdMs);
 
 		while (nowMs() < targetTimeMs) {}
+		#end
 	}
 
 	public static function getFrameBudgetMs(targetFps:Int):Float
