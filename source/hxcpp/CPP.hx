@@ -125,7 +125,7 @@ class CPP
 			).count() / 1000.0
 		");
 		#else
-		return Sys.time() * 1000;
+		return Date.now().getTime();
 		#end
 	}
 
