@@ -1,0 +1,66 @@
+name: Build HTML5
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-html5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.7
+
+      - name: Install hmm
+        run: haxelib install hmm
+
+      - name: Cache haxelib dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/haxelib
+          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          restore-keys: |
+            ${{ runner.os }}-haxelib-
+
+      - name: Install dependencies
+        run: haxelib run hmm install
+
+      - name: Setup Lime
+        run: haxelib run lime setup -y
+
+      - name: Build HTML5
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          attempt=1
+          max_attempts=2
+
+          until haxelib run lime build html5 -final; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Build failed after $max_attempts attempts"
+              exit 1
+            fi
+
+            echo "Build attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+          done
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-HTML5
+          path: export/html5/bin
+          retention-days: 7
