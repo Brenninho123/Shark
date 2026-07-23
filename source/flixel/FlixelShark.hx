@@ -14,6 +14,9 @@ import lime.manager.LimeManager;
 import shark.audio.Audio;
 import shark.backend.Language;
 import shark.backend.SharkCamera;
+import git.graphic.GraphicGit;
+import git.resolution.Resolution4K;
+import shark.shaders.WaterShader;
 
 class FlixelShark
 {
@@ -103,6 +106,68 @@ class FlixelShark
 		state.add(accentBar);
 
 		return card;
+	}
+
+	public static function createRoundedCard(state:FlxState, x:Float, y:Float, width:Float, height:Float, bgColor:FlxColor, accentColor:FlxColor,
+			radius:Float = 10, shadowColor:FlxColor = FlxColor.BLACK):FlxSprite
+	{
+		var shadow = GraphicGit.makeRoundedRectSprite(x + 4, y + 4, Std.int(width), Std.int(height), shadowColor, radius, 0.35);
+		state.add(shadow);
+
+		var card = GraphicGit.makeRoundedRectSprite(x, y, Std.int(width), Std.int(height), bgColor, radius, 0.35);
+		state.add(card);
+
+		var border = new FlxSprite(x, y);
+		border.pixels = GraphicGit.createRoundedRectBorder(Std.int(width), Std.int(height), accentColor, radius, 2, 0.7);
+		state.add(border);
+
+		return card;
+	}
+
+	public static function createRoundedPanel(state:FlxState, x:Float, y:Float, width:Float, height:Float, color:FlxColor, radius:Float = 12,
+			alpha:Float = 0.35):FlxSprite
+	{
+		var panel = GraphicGit.makeRoundedRectSprite(x, y, Std.int(width), Std.int(height), color, radius, alpha);
+		state.add(panel);
+		return panel;
+	}
+
+	public static function makeScaledText(x:Float, y:Float, width:Float, text:String, baseSize:Int = 16, color:FlxColor = FlxColor.WHITE,
+			alignment:FlxTextAlign = LEFT):FlxText
+	{
+		return makeText(x, y, width, text, Resolution4K.scaledInt(baseSize), color, alignment);
+	}
+
+	public static function makeScaledButton(x:Float, y:Float, label:String, onClick:Void->Void, baseWidth:Int, baseHeight:Int,
+			bgColor:FlxColor = FlxColor.GRAY, textColor:FlxColor = FlxColor.WHITE):FlxButton
+	{
+		return makeButton(x, y, label, onClick, Resolution4K.scaledInt(baseWidth), Resolution4K.scaledInt(baseHeight), bgColor, textColor);
+	}
+
+	static var activeWaterShaders:Array<WaterShader> = [];
+
+	public static function applyWaterEffect(sprite:FlxSprite, amplitude:Float = 0.01, frequency:Float = 20, tintStrength:Float = 0.15):WaterShader
+	{
+		var shader = new WaterShader();
+		shader.amplitude = amplitude;
+		shader.frequency = frequency;
+		shader.tintStrength = tintStrength;
+
+		sprite.shader = shader;
+		activeWaterShaders.push(shader);
+
+		return shader;
+	}
+
+	public static function updateAllWaterShaders(elapsed:Float):Void
+	{
+		for (shader in activeWaterShaders)
+			shader.update(elapsed);
+	}
+
+	public static function clearWaterShaders():Void
+	{
+		activeWaterShaders = [];
 	}
 
 	public static function createIconButton(state:FlxState, x:Float, y:Float, width:Int, height:Int, color:FlxColor, onClick:Void->Void):FlxButton
