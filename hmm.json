@@ -51,6 +51,11 @@
 			"name": "SScript",
 			"type": "haxelib",
 			"version": "22.3.1"
+		},
+		{
+			"name": "flixel-demos",
+			"type": "haxelib",
+			"version": "3.3.0"
 		}
 	]
 }
