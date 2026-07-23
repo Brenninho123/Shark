@@ -21,6 +21,7 @@ class Project extends HXProject
 		setupIcon();
 		setupDefines();
 		setupOptimizations();
+		checkConfigJson();
 
 		switch (target)
 		{
@@ -38,6 +39,21 @@ class Project extends HXProject
 				setupMac();
 			default:
 		}
+
+		logBuildSummary();
+	}
+
+	function checkConfigJson():Void
+	{
+		if (!sys.FileSystem.exists("assets/data/config.json"))
+		{
+			Log.warn("assets/data/config.json not found - run `haxe --run setup/application/Setup.hx` first, or the chat/image API won't be configured.");
+		}
+	}
+
+	function logBuildSummary():Void
+	{
+		Log.info('Shark ${APP_VERSION} (build ${meta.buildNumber}) -> $target, ${debug ? "debug" : "release"}');
 	}
 
 	function setupMeta():Void
@@ -86,7 +102,7 @@ class Project extends HXProject
 		if (debug)
 			haxelibs.push(new Haxelib("flixel-demos"));
 
-		if (target != HTML5)
+		if (target != HTML5 && !defined("skipDiscord"))
 			haxelibs.push(new Haxelib("hxdiscord_rpc"));
 	}
 
@@ -116,6 +132,23 @@ class Project extends HXProject
 		}
 
 		haxedefs.set("SHARK_VERSION", APP_VERSION);
+		haxedefs.set("SHARK_COMMIT", resolveGitCommit());
+	}
+
+	function resolveGitCommit():String
+	{
+		try
+		{
+			var process = new sys.io.Process("git", ["rev-parse", "--short", "HEAD"]);
+			var output:String = StringTools.trim(process.stdout.readAll().toString());
+			process.close();
+
+			return output.length > 0 ? output : "unknown";
+		}
+		catch (e:Dynamic)
+		{
+			return "unknown";
+		}
 	}
 
 	function setupOptimizations():Void
@@ -164,11 +197,17 @@ class Project extends HXProject
 
 		if (!debug)
 		{
-			config.set("android.certificate-path", "Certificates/android.keystore");
-			config.set("android.certificate-password", "android");
-			config.set("android.certificate-alias", "android");
-			config.set("android.certificate-alias-password", "android");
+			config.set("android.certificate-path", envOr("SHARK_KEYSTORE_PATH", "Certificates/android.keystore"));
+			config.set("android.certificate-password", envOr("SHARK_KEYSTORE_PASSWORD", "android"));
+			config.set("android.certificate-alias", envOr("SHARK_KEYSTORE_ALIAS", "android"));
+			config.set("android.certificate-alias-password", envOr("SHARK_KEYSTORE_ALIAS_PASSWORD", "android"));
 		}
+	}
+
+	function envOr(name:String, fallback:String):String
+	{
+		var value:String = Sys.getEnv(name);
+		return value != null && value.length > 0 ? value : fallback;
 	}
 
 	function setupIOS():Void
