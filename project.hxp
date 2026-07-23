@@ -83,6 +83,9 @@ class Project extends HXProject
 		haxelibs.push(new Haxelib("hscript"));
 		haxelibs.push(new Haxelib("SScript"));
 
+		if (debug)
+			haxelibs.push(new Haxelib("flixel-demos"));
+
 		if (target != HTML5)
 			haxelibs.push(new Haxelib("hxdiscord_rpc"));
 	}
