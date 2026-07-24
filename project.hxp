@@ -120,6 +120,8 @@ class Project extends HXProject
 
 		if (target == ANDROID)
 			haxelibs.push(new Haxelib("extension-androidtools"));
+
+		haxelibs.push(new Haxelib("polymod"));
 	}
 
 	function setupAssets():Void
@@ -132,6 +134,21 @@ class Project extends HXProject
 
 		if (sys.FileSystem.exists("assets/shaders") && sys.FileSystem.readDirectory("assets/shaders").length > 0)
 			includeAssets("assets/shaders", "assets/shaders");
+
+		setupMods();
+	}
+
+	function setupMods():Void
+	{
+		var hasMods:Bool = sys.FileSystem.exists("mods") && sys.FileSystem.isDirectory("mods") && sys.FileSystem.readDirectory("mods").length > 0;
+
+		if (!hasMods)
+			return;
+
+		includeAssets("mods", "mods");
+		haxedefs.set("SHARK_HAS_BUNDLED_MODS", "");
+
+		Log.info('Bundled mods folder detected (mods/) - packaging with the app.');
 	}
 
 	function setupIcon():Void
