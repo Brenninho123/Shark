@@ -282,6 +282,86 @@ class StorageUtil
 		return count;
 	}
 
+	public static function findByPrompt(searchText:String):Array<StoredImageInfo>
+	{
+		var query:String = searchText.toLowerCase();
+		var results:Array<StoredImageInfo> = [];
+
+		for (info in listSavedImagesWithMetadata())
+		{
+			if (info.prompt != null && info.prompt.toLowerCase().indexOf(query) != -1)
+				results.push(info);
+		}
+
+		return results;
+	}
+
+	public static function renameImage(oldFilename:String, newFilename:String):Bool
+	{
+		#if (android || ios)
+		var oldSafeName:String = sanitizeFilename(oldFilename);
+		var newSafeName:String = sanitizeFilename(newFilename);
+
+		var oldImagePath:String = getContentPath() + "/" + oldSafeName + ".png";
+		var newImagePath:String = getContentPath() + "/" + newSafeName + ".png";
+		var oldMetaPath:String = getContentPath() + "/" + oldSafeName + ".json";
+		var newMetaPath:String = getContentPath() + "/" + newSafeName + ".json";
+
+		if (!FileSystem.exists(oldImagePath))
+			return false;
+
+		try
+		{
+			FileSystem.rename(oldImagePath, newImagePath);
+
+			if (FileSystem.exists(oldMetaPath))
+				FileSystem.rename(oldMetaPath, newMetaPath);
+
+			return true;
+		}
+		catch (e:Dynamic)
+		{
+			return false;
+		}
+		#else
+		return false;
+		#end
+	}
+
+	public static function exportImageBytes(filename:String):haxe.io.Bytes
+	{
+		#if (android || ios)
+		var safeName:String = sanitizeFilename(filename);
+		var path:String = getContentPath() + "/" + safeName + ".png";
+
+		if (!FileSystem.exists(path))
+			return null;
+
+		try
+		{
+			return File.getBytes(path);
+		}
+		catch (e:Dynamic)
+		{
+			return null;
+		}
+		#else
+		return null;
+		#end
+	}
+
+	public static function getOldestImage():StoredImageInfo
+	{
+		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata();
+		return images.length > 0 ? images[images.length - 1] : null;
+	}
+
+	public static function getNewestImage():StoredImageInfo
+	{
+		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata();
+		return images.length > 0 ? images[0] : null;
+	}
+
 	static function sanitizeFilename(filename:String):String
 	{
 		var result:String = filename;
