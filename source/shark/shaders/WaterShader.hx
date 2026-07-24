@@ -1,11 +1,17 @@
 package shark.shaders;
 
+import flixel.FlxG;
 import flixel.system.FlxAssets.FlxShader;
+import lime.manager.LimeManager;
 
 class WaterShader extends FlxShader
 {
 	@:glFragmentSource('
 		#pragma header
+
+		#ifdef GL_ES
+		precision mediump float;
+		#endif
 
 		uniform float uTime;
 		uniform float uAmplitude;
@@ -30,7 +36,9 @@ class WaterShader extends FlxShader
 	{
 		super();
 
-		amplitude = 0.01;
+		var mobileScale:Float = FlxG.onMobile ? 0.6 : 1;
+
+		amplitude = 0.01 * mobileScale;
 		frequency = 20;
 		tintStrength = 0.15;
 		tint = [0.38, 0.65, 0.75];
@@ -104,5 +112,16 @@ class WaterShader extends FlxShader
 	public function update(elapsed:Float):Void
 	{
 		time += elapsed;
+	}
+
+	public static function isRecommendedForCurrentDevice():Bool
+	{
+		if (LimeManager.isLowMemoryMode)
+			return false;
+
+		if (FlxG.onMobile && LimeManager.currentQualityTier == 0)
+			return false;
+
+		return true;
 	}
 }
