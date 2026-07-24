@@ -117,6 +117,9 @@ class Project extends HXProject
 
 		if (target != HTML5)
 			haxelibs.push(new Haxelib("hxdiscord_rpc"));
+
+		if (target == ANDROID)
+			haxelibs.push(new Haxelib("extension-androidtools"));
 	}
 
 	function setupAssets():Void
