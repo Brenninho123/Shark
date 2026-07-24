@@ -1,5 +1,9 @@
 #pragma header
 
+#ifdef GL_ES
+precision mediump float;
+#endif
+
 uniform float uTime;
 uniform float uAmplitude;
 uniform float uFrequency;
