@@ -206,7 +206,7 @@ class Project extends HXProject
 		haxedefs.set("FLX_NO_NATIVE_CURSOR", "");
 		haxedefs.set("FLX_NO_SOUND_TRAY", "");
 
-		config.set("android.permissions", "android.permission.INTERNET android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE");
+		config.set("android.permissions", "android.permission.INTERNET android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE android.permission.RECORD_AUDIO android.permission.READ_MEDIA_IMAGES android.permission.READ_MEDIA_AUDIO");
 		config.set("android.target-sdk-version", "35");
 		config.set("android.minimum-sdk-version", "21");
 		config.set("android.install-location", "auto");
