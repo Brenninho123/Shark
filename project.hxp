@@ -53,7 +53,7 @@ class Project extends HXProject
 
 	function logBuildSummary():Void
 	{
-		Log.info('Shark ${APP_VERSION} (build ${meta.buildNumber}) -> $target, ${debug ? "debug" : "release"}');
+		Log.info('Shark ${meta.version} (build ${meta.buildNumber}, commit ${haxedefs.get("SHARK_COMMIT")}) -> $target, ${debug ? "debug" : "release"}');
 	}
 
 	function setupMeta():Void
@@ -61,9 +61,22 @@ class Project extends HXProject
 		meta.title = APP_TITLE;
 		meta.description = "An artificial intelligence made with HaxeFlixel.";
 		meta.packageName = APP_PACKAGE;
-		meta.version = APP_VERSION;
+		meta.version = resolveVersion();
 		meta.company = APP_COMPANY;
 		meta.buildNumber = resolveBuildNumber();
+	}
+
+	function resolveVersion():String
+	{
+		if (sys.FileSystem.exists("VERSION"))
+		{
+			var content:String = StringTools.trim(sys.io.File.getContent("VERSION"));
+
+			if (content.length > 0)
+				return content;
+		}
+
+		return APP_VERSION;
 	}
 
 	function setupApp():Void
@@ -168,6 +181,8 @@ class Project extends HXProject
 		window.resizable = true;
 		window.background = 0x00111F;
 
+		architectures = [Architecture.X64];
+
 		haxedefs.set("SHARK_PLATFORM", "windows");
 
 		if (!debug)
@@ -175,6 +190,8 @@ class Project extends HXProject
 			haxeflags.push("-dce full");
 			haxeflags.push("-D no-traces");
 		}
+
+		cleanIfRequested("windows");
 	}
 
 	function setupAndroid():Void
@@ -240,7 +257,11 @@ class Project extends HXProject
 		window.resizable = true;
 		window.background = 0x00111F;
 
+		architectures = [Architecture.X64];
+
 		haxedefs.set("SHARK_PLATFORM", "linux");
+
+		cleanIfRequested("linux");
 	}
 
 	function setupMac():Void
@@ -250,12 +271,73 @@ class Project extends HXProject
 		window.resizable = true;
 		window.background = 0x00111F;
 
+		architectures = [Architecture.X64];
+
 		haxedefs.set("SHARK_PLATFORM", "mac");
+
+		cleanIfRequested("mac");
+	}
+
+	function cleanIfRequested(platformFolder:String):Void
+	{
+		var shouldClean:String = Sys.getEnv("SHARK_CLEAN_BUILD");
+
+		if (shouldClean == null || shouldClean != "1")
+			return;
+
+		var exportPath:String = 'export/$platformFolder';
+
+		if (sys.FileSystem.exists(exportPath))
+		{
+			Log.info('SHARK_CLEAN_BUILD=1 -> removing $exportPath before build');
+			deleteRecursive(exportPath);
+		}
+	}
+
+	function deleteRecursive(path:String):Void
+	{
+		if (!sys.FileSystem.exists(path))
+			return;
+
+		if (sys.FileSystem.isDirectory(path))
+		{
+			for (entry in sys.FileSystem.readDirectory(path))
+				deleteRecursive('$path/$entry');
+
+			sys.FileSystem.deleteDirectory(path);
+		}
+		else
+		{
+			sys.FileSystem.deleteFile(path);
+		}
 	}
 
 	function resolveBuildNumber():String
 	{
-		var timestamp:Float = Date.now().getTime();
-		return Std.string(Std.int(timestamp / 1000));
+		var path:String = ".build_number";
+		var current:Int = 0;
+
+		try
+		{
+			if (sys.FileSystem.exists(path))
+				current = Std.parseInt(StringTools.trim(sys.io.File.getContent(path)));
+
+			if (current == null)
+				current = 0;
+		}
+		catch (e:Dynamic)
+		{
+			current = 0;
+		}
+
+		current++;
+
+		try
+		{
+			sys.io.File.saveContent(path, Std.string(current));
+		}
+		catch (e:Dynamic) {}
+
+		return Std.string(current);
 	}
 }
