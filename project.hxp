@@ -148,6 +148,9 @@ class Project extends HXProject
 
 	function setupMods():Void
 	{
+		if (target == HTML5)
+			return;
+
 		var hasMods:Bool = sys.FileSystem.exists("mods") && sys.FileSystem.isDirectory("mods") && sys.FileSystem.readDirectory("mods").length > 0;
 
 		if (!hasMods)
