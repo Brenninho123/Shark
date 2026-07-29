@@ -133,6 +133,13 @@ class Project extends HXProject
 
 		if (target == LINUX)
 			haxelibs.push(new Haxelib("hxgamemode"));
+
+		if (debug)
+		{
+			haxelibs.push(new Haxelib("munit"));
+			haxelibs.push(new Haxelib("mconsole"));
+			haxelibs.push(new Haxelib("mcover"));
+		}
 	}
 
 	function setupAssets():Void
