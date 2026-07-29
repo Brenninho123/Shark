@@ -132,13 +132,13 @@ class SutilLime
 
 		lines.push('Platform: ${LimeManager.getPlatformName()}');
 		lines.push('Build: ${LimeManager.getBuildSummary()}');
+		lines.push('Native: ${MainCpp.getNativeBuildInfo()}');
 		lines.push('Device score: ${Math.round(devicePerformanceScore * 100)}%${isLowEndDevice ? " (low-end)" : ""}');
 		lines.push('Median frame time: ${Math.round(getMedianFrameTime() * 100) / 100}ms');
 		lines.push('Frame spikes: ${detectFrameSpikes()}');
 		lines.push('Online: ${Online.isOnline} (uptime ${Math.round(Online.getUptimePercentage())}%)');
 		lines.push('Time since native start: ${Math.round(MainCpp.getTimeSinceNativeStartMs())}ms');
 		lines.push('Boot checkpoints: ${MainCpp.getCheckpointReport()}');
-		lines.push('Arch: ${MainCpp.getCpuArchitecture()} (${MainCpp.is64Bit() ? "64-bit" : "32-bit"}) | Compiler: ${MainCpp.getCompilerName()}');
 
 		#if cpp
 		lines.push('Memory: ${Math.round(CPP.getMemoryUsageMB())}MB / ${Math.round(CPP.getMemoryReservedMB())}MB');
