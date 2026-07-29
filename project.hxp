@@ -123,14 +123,6 @@ class Project extends HXProject
 
 		haxelibs.push(new Haxelib("polymod"));
 
-		if (target == WINDOWS || target == MAC || target == LINUX || target == ANDROID)
-		{
-			haxelibs.push(new Haxelib("hxCodec"));
-
-			if (debug)
-				haxedefs.set("HXC_LIBVLC_LOGGING", "");
-		}
-
 		if (target == WINDOWS || target == MAC || target == LINUX || target == ANDROID || target == IOS)
 			haxelibs.push(new Haxelib("hxvlc"));
 
