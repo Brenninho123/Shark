@@ -248,6 +248,25 @@ class FlixelShark
 		return group;
 	}
 
+	public static function addBoltIcon(state:FlxState, button:FlxButton, color:FlxColor = FlxColor.WHITE):FlxSpriteGroup
+	{
+		var group = new FlxSpriteGroup(button.x, button.y);
+
+		var cx:Float = button.width / 2;
+		var cy:Float = button.height / 2;
+
+		var top = makeSprite(cx - 1, cy - 10, 3, 12, color);
+		top.angle = 20;
+		group.add(top);
+
+		var bottom = makeSprite(cx - 2, cy - 2, 3, 12, color);
+		bottom.angle = 20;
+		group.add(bottom);
+
+		state.add(group);
+		return group;
+	}
+
 	public static function createLightRays(state:FlxState, count:Int, color:FlxColor = FlxColor.WHITE):Array<FlxSprite>
 	{
 		var rays:Array<FlxSprite> = [];
