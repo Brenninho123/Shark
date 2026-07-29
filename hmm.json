@@ -91,6 +91,11 @@
 			"name": "mcover",
 			"type": "haxelib",
 			"version": "2.2.2"
+		},
+		{
+			"name": "hxvlc",
+			"type": "haxelib",
+			"version": "2.3.0"
 		}
 	]
 }
