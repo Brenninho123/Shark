@@ -130,6 +130,9 @@ class Project extends HXProject
 			if (debug)
 				haxedefs.set("HXC_LIBVLC_LOGGING", "");
 		}
+
+		if (target == LINUX)
+			haxelibs.push(new Haxelib("hxgamemode"));
 	}
 
 	function setupAssets():Void
