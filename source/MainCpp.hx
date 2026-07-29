@@ -1,6 +1,6 @@
 package;
 
-import macro.SharkMacro;
+import macros.SharkMacro;
 
 @:headerCode('
 #include <chrono>
