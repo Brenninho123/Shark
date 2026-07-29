@@ -66,6 +66,11 @@
 			"name": "polymod",
 			"type": "haxelib",
 			"version": "1.8.0"
+		},
+		{
+			"name": "hxCodec",
+			"type": "haxelib",
+			"version": "3.0.2"
 		}
 	]
 }
