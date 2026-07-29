@@ -3,10 +3,6 @@ package git.performance;
 import flixel.FlxG;
 import lime.manager.LimeManager;
 
-#if linux
-import hxgamemode.GameMode;
-#end
-
 class Boost
 {
 	public static var isBoostActive(default, null):Bool = false;
@@ -85,23 +81,7 @@ class Boost
 	static function requestGameMode(start:Bool):Void
 	{
 		#if linux
-		try
-		{
-			if (start)
-			{
-				GameMode.requestStart();
-				isGameModeActive = true;
-			}
-			else
-			{
-				GameMode.requestEnd();
-				isGameModeActive = false;
-			}
-		}
-		catch (e:Dynamic)
-		{
-			isGameModeActive = false;
-		}
+		isGameModeActive = false;
 		#end
 	}
 
