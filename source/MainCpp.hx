@@ -1,5 +1,7 @@
 package;
 
+import macro.SharkMacro;
+
 @:headerCode('
 #include <chrono>
 #include <thread>
@@ -7,6 +9,11 @@ package;
 ')
 class MainCpp
 {
+	public static inline var BUILD_VERSION:String = SharkMacro.getVersion();
+	public static inline var BUILD_COMMIT:String = SharkMacro.getCommit();
+	public static inline var BUILD_PLATFORM:String = SharkMacro.getPlatform();
+	public static inline var IS_CI_BUILD:Bool = SharkMacro.isCiBuild();
+
 	static var nativeStartTimeMs:Float = -1;
 	static var checkpoints:Map<String, Float> = new Map();
 	static var checkpointOrder:Array<String> = [];
@@ -219,5 +226,11 @@ class MainCpp
 			return 0;
 
 		return 1000 / targetFps;
+	}
+
+	public static function getNativeBuildInfo():String
+	{
+		var ciTag:String = IS_CI_BUILD ? " [CI]" : "";
+		return 'Shark $BUILD_VERSION ($BUILD_PLATFORM, ${is64Bit() ? "64-bit" : "32-bit"}, ${getCpuArchitecture()}/${getCompilerName()}) commit $BUILD_COMMIT$ciTag';
 	}
 }
