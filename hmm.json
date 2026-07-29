@@ -76,6 +76,21 @@
 			"name": "hxgamemode",
 			"type": "haxelib",
 			"version": "1.0.1"
+		},
+		{
+			"name": "munit",
+			"type": "haxelib",
+			"version": "2.3.5"
+		},
+		{
+			"name": "mconsole",
+			"type": "haxelib",
+			"version": "1.6.0"
+		},
+		{
+			"name": "mcover",
+			"type": "haxelib",
+			"version": "2.2.2"
 		}
 	]
 }
