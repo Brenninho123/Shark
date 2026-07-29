@@ -3,12 +3,17 @@ package git.performance;
 import flixel.FlxG;
 import lime.manager.LimeManager;
 
+#if linux
+import hxgamemode.GameMode;
+#end
+
 class Boost
 {
 	public static var isBoostActive(default, null):Bool = false;
 	public static var targetFPS(default, null):Int = 60;
 	public static var maxSupportedFPS:Int = 144;
 	public static var minSupportedFPS:Int = 10;
+	public static var isGameModeActive(default, null):Bool = false;
 
 	static var originalDrawFramerate:Int = 60;
 	static var originalUpdateFramerate:Int = 60;
@@ -56,6 +61,8 @@ class Boost
 		LimeManager.maxFramerate = maxSupportedFPS;
 		LimeManager.setPerformanceMode("high");
 		setTargetFPS(maxSupportedFPS);
+
+		requestGameMode(true);
 	}
 
 	public static function disableBoost():Void
@@ -71,6 +78,31 @@ class Boost
 		FlxG.drawFramerate = originalDrawFramerate;
 		FlxG.updateFramerate = originalUpdateFramerate;
 		targetFPS = originalDrawFramerate;
+
+		requestGameMode(false);
+	}
+
+	static function requestGameMode(start:Bool):Void
+	{
+		#if linux
+		try
+		{
+			if (start)
+			{
+				GameMode.requestStart();
+				isGameModeActive = true;
+			}
+			else
+			{
+				GameMode.requestEnd();
+				isGameModeActive = false;
+			}
+		}
+		catch (e:Dynamic)
+		{
+			isGameModeActive = false;
+		}
+		#end
 	}
 
 	public static function toggleBoost():Bool
@@ -106,6 +138,7 @@ class Boost
 	public static function getBoostSummary():String
 	{
 		var status:String = isBoostActive ? "ON" : "off";
-		return 'Boost: $status | Target: ${targetFPS}fps | Actual: ${Std.int(getCurrentFPS())}fps';
+		var gameModeTag:String = isGameModeActive ? " | GameMode: active" : "";
+		return 'Boost: $status | Target: ${targetFPS}fps | Actual: ${Std.int(getCurrentFPS())}fps$gameModeTag';
 	}
 }
