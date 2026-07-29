@@ -13,6 +13,7 @@ import flixel.tweens.FlxEase;
 import openfl.display.BitmapData;
 import flixel.FlixelShark;
 import git.graphic.GraphicGit;
+import git.performance.Boost;
 import git.resolution.Resolution4K;
 import shark.active.GameState;
 import shark.active.system.Body;
@@ -50,6 +51,7 @@ class MainMenuState extends FlxState
 	var muteButton:FlxButton;
 	var newChatButton:FlxButton;
 	var optionsButton:FlxButton;
+	var boostButton:FlxButton;
 	var muteIcon:FlxSpriteGroup;
 	var statusDot:FlxSprite;
 	var statusText:FlxText;
@@ -131,6 +133,12 @@ class MainMenuState extends FlxState
 
 		optionsButton = createIconButton(newChatButton.x + newChatButton.width + 10, 12, topBarSize, topBarSize, COLOR_MID, onOptionsPressed);
 		addMenuIcon(optionsButton);
+
+		Boost.initialize();
+
+		boostButton = createIconButton(optionsButton.x + optionsButton.width + 10, 12, topBarSize, topBarSize,
+			Boost.isBoostActive ? COLOR_ONLINE : COLOR_MID, onBoostPressed);
+		FlixelShark.addBoltIcon(this, boostButton, COLOR_FOAM);
 
 		Internet.addListener(onOnlineStatusChanged);
 		onOnlineStatusChanged(Internet.isConnected);
@@ -499,6 +507,14 @@ class MainMenuState extends FlxState
 	function onOptionsPressed():Void
 	{
 		FlixelShark.switchState(new OptionsState(), true, 0.4, COLOR_ABYSS);
+	}
+
+	function onBoostPressed():Void
+	{
+		var active:Bool = Boost.toggleBoost();
+
+		boostButton.color = active ? COLOR_ONLINE : COLOR_MID;
+		pulseButton(boostButton);
 	}
 
 	function onOnlineStatusChanged(online:Bool):Void
