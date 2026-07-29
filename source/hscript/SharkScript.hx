@@ -138,7 +138,7 @@ class SharkScript
 		#if cpp
 		return CPP.getHighResTimeMs();
 		#else
-		return Sys.time() * 1000;
+		return Date.now().getTime();
 		#end
 	}
 
