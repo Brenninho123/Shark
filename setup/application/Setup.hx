@@ -19,6 +19,10 @@ class Setup
 			ensureCursorFolder,
 			ensureFontsFolder,
 			ensureLangFolder,
+			ensureShadersFolder,
+			ensureVideosFolder,
+			ensureModsFolder,
+			ensureVersionFile,
 			ensureGitignoreEntries
 		];
 
@@ -94,13 +98,62 @@ class Setup
 		ensureDirectory(joinPath(repoRoot, "assets/data/lang"));
 	}
 
+	static function ensureShadersFolder():Void
+	{
+		ensureDirectory(joinPath(repoRoot, "assets/shaders"));
+	}
+
+	static function ensureVideosFolder():Void
+	{
+		ensureDirectory(joinPath(repoRoot, "assets/videos"));
+	}
+
+	static function ensureModsFolder():Void
+	{
+		var modsPath:String = joinPath(repoRoot, "mods");
+		ensureDirectory(modsPath);
+
+		var readmePath:String = joinPath(modsPath, "README.md");
+
+		if (FileSystem.exists(readmePath))
+			return;
+
+		var content:String = "# Mods\n\n"
+			+ "Drop `.hxs` (HScript) files here to extend Shark without recompiling.\n\n"
+			+ "```haxe\n"
+			+ "function onCreate() {\n"
+			+ "\tprint(\"My mod loaded!\");\n"
+			+ "}\n\n"
+			+ "function onUpdate(elapsed) {\n"
+			+ "\t// runs every frame\n"
+			+ "}\n"
+			+ "```\n\n"
+			+ "See shark/modding/Module.hx and shark/scripting/HScript.hx for the available API.\n";
+
+		File.saveContent(readmePath, content);
+		Sys.println("Created mods/README.md");
+	}
+
+	static function ensureVersionFile():Void
+	{
+		var versionPath:String = joinPath(repoRoot, "VERSION");
+
+		if (FileSystem.exists(versionPath))
+			return;
+
+		File.saveContent(versionPath, "0.1.0\n");
+		Sys.println("Created VERSION (0.1.0)");
+	}
+
 	static function ensureGitignoreEntries():Void
 	{
 		var gitignorePath:String = joinPath(repoRoot, ".gitignore");
 		var requiredEntries:Array<String> = [
 			"assets/data/config.json",
 			"Certificates/",
-			"export/"
+			"export/",
+			".build_number",
+			".haxelib/"
 		];
 
 		var existingContent:String = FileSystem.exists(gitignorePath) ? File.getContent(gitignorePath) : "";
