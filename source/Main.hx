@@ -102,15 +102,21 @@ class Main extends Sprite
 
 		ImageCreator.initialize();
 
+		#if sys
 		extractBundledMods();
 		ModuleHandler.initialize();
 		Mods.initialize();
+		#end
 
 		setupGame();
 		MainCpp.recordCheckpoint("flixel_game_ready");
 
 		setupTouch();
+
+		#if sys
 		setupMods();
+		#end
+
 		setupDiscord();
 		setupDebugOverlay();
 
