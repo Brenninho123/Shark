@@ -92,28 +92,29 @@ class Mods
 			return Head.totalImages;
 		});
 
-		if (boundBody != null)
+		mod.bind("bodyIdle", function():Void
 		{
-			mod.bind("bodyIdle", function():Void
-			{
+			if (boundBody != null)
 				boundBody.setState(IDLE);
-			});
+		});
 
-			mod.bind("bodyThink", function():Void
-			{
+		mod.bind("bodyThink", function():Void
+		{
+			if (boundBody != null)
 				boundBody.setState(THINKING);
-			});
+		});
 
-			mod.bind("bodyTalk", function():Void
-			{
+		mod.bind("bodyTalk", function():Void
+		{
+			if (boundBody != null)
 				boundBody.setState(TALKING);
-			});
+		});
 
-			mod.bind("bodyReact", function():Void
-			{
+		mod.bind("bodyReact", function():Void
+		{
+			if (boundBody != null)
 				boundBody.setState(REACTING);
-			});
-		}
+		});
 	}
 
 	public static function updateAll(elapsed:Float):Void
