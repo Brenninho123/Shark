@@ -33,7 +33,10 @@ import shark.ui.discord.Discord;
 import shark.ui.input.Cursor;
 import shark.ui.security.Guard;
 import git.resolution.Resolution4K;
+import shark.backend.Mods;
 import shark.mobile.utils.TouchUtil;
+import shark.modding.Module;
+import shark.modding.ModuleHandler;
 
 class Main extends Sprite
 {
@@ -99,16 +102,62 @@ class Main extends Sprite
 
 		ImageCreator.initialize();
 
+		extractBundledMods();
+		ModuleHandler.initialize();
+		Mods.initialize();
+
 		setupGame();
 		MainCpp.recordCheckpoint("flixel_game_ready");
 
 		setupTouch();
+		setupMods();
 		setupDiscord();
 		setupDebugOverlay();
 
 		#if debug
 		addChild(new FPS(10, 10, 0xFFFFFF));
 		#end
+	}
+
+	function extractBundledMods():Void
+	{
+		#if (sys && SHARK_HAS_BUNDLED_MODS)
+		if (!Module.ensureModsDirectory())
+			return;
+
+		var prefix:String = "assets/mods/";
+		var suffix:String = "." + Module.SCRIPT_EXTENSION;
+
+		for (path in openfl.utils.Assets.list())
+		{
+			if (!StringTools.startsWith(path, prefix) || !StringTools.endsWith(path, suffix))
+				continue;
+
+			var filename:String = path.substr(prefix.length);
+			var destPath:String = Module.getModsDirectory() + "/" + filename;
+
+			if (sys.FileSystem.exists(destPath))
+				continue;
+
+			try
+			{
+				var content:String = openfl.utils.Assets.getText(path);
+				sys.io.File.saveContent(destPath, content);
+			}
+			catch (e:Dynamic)
+			{
+				CrasherLog.logWarning('Failed to extract bundled mod: $filename');
+			}
+		}
+		#end
+	}
+
+	function setupMods():Void
+	{
+		FlxG.signals.postUpdate.add(function():Void
+		{
+			Mods.updateAll(FlxG.elapsed);
+		});
 	}
 
 	function setupTouch():Void
