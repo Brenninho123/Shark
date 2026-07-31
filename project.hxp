@@ -73,10 +73,29 @@ class Project extends HXProject
 			var content:String = StringTools.trim(sys.io.File.getContent("VERSION"));
 
 			if (content.length > 0)
+			{
+				if (!isValidVersionFormat(content))
+					Log.warn('VERSION file contains "$content", which does not look like a semver string (e.g. 1.2.3) - using it anyway.');
+
 				return content;
+			}
 		}
 
 		return APP_VERSION;
+	}
+
+	function isValidVersionFormat(value:String):Bool
+	{
+		var parts:Array<String> = value.split(".");
+
+		if (parts.length < 2 || parts.length > 3)
+			return false;
+
+		for (part in parts)
+			if (Std.parseInt(part) == null)
+				return false;
+
+		return true;
 	}
 
 	function setupApp():Void
@@ -95,6 +114,7 @@ class Project extends HXProject
 		window.hardware = true;
 		window.vsync = false;
 		window.antialiasing = 0;
+		window.allowShaders = true;
 	}
 
 	function setupSource():Void
@@ -284,6 +304,8 @@ class Project extends HXProject
 		window.background = 0x00111F;
 
 		haxedefs.set("SHARK_PLATFORM", "html5");
+
+		config.set("html5.title", APP_TITLE);
 	}
 
 	function setupLinux():Void
