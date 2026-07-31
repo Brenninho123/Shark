@@ -146,6 +146,9 @@ class Project extends HXProject
 		if (target == WINDOWS || target == MAC || target == LINUX || target == ANDROID || target == IOS)
 			haxelibs.push(new Haxelib("hxvlc"));
 
+		if (target == WINDOWS)
+			haxelibs.push(new Haxelib("hxWindowColorMode"));
+
 		if (target == LINUX)
 			haxelibs.push(new Haxelib("hxgamemode"));
 
