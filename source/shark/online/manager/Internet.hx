@@ -2,6 +2,7 @@ package shark.online.manager;
 
 import haxe.Timer;
 import shark.online.Online;
+import shark.ui.debug.CrasherLog;
 
 typedef PendingAction = {
 	action:Void->Void,
@@ -14,6 +15,8 @@ class Internet
 	public static var isConnected(get, never):Bool;
 	public static var latencyMs(get, never):Float;
 	public static var maxPendingActionAgeSeconds:Float = 300;
+	public static var maxPendingActions:Int = 100;
+	public static var pendingActionStaggerMs:Int = 150;
 
 	static var listeners:Array<Bool->Void> = [];
 	static var pendingActions:Array<PendingAction> = [];
@@ -66,7 +69,16 @@ class Internet
 	static function onStatusChanged(online:Bool):Void
 	{
 		for (listener in listeners)
-			listener(online);
+		{
+			try
+			{
+				listener(online);
+			}
+			catch (e:Dynamic)
+			{
+				CrasherLog.logWarning('Internet listener threw an error: ${Std.string(e)}');
+			}
+		}
 
 		if (online)
 			runPendingActions();
@@ -76,8 +88,18 @@ class Internet
 	{
 		if (isConnected)
 		{
-			action();
+			safeRun(action);
 			return;
+		}
+
+		if (pendingActions.length >= maxPendingActions)
+		{
+			var dropped:PendingAction = pendingActions.shift();
+
+			if (dropped.onExpired != null)
+				safeRun(dropped.onExpired);
+
+			CrasherLog.logWarning('Pending action queue full (>$maxPendingActions), dropping oldest entry');
 		}
 
 		pendingActions.push({
@@ -98,6 +120,7 @@ class Internet
 		pendingActions = [];
 
 		var now:Float = Timer.stamp();
+		var delayMs:Int = 0;
 
 		for (pending in actions)
 		{
@@ -106,12 +129,38 @@ class Internet
 			if (age > maxPendingActionAgeSeconds)
 			{
 				if (pending.onExpired != null)
-					pending.onExpired();
+					safeRun(pending.onExpired);
 
 				continue;
 			}
 
-			pending.action();
+			var actionRef:Void->Void = pending.action;
+
+			if (delayMs <= 0)
+			{
+				safeRun(actionRef);
+			}
+			else
+			{
+				Timer.delay(function():Void
+				{
+					safeRun(actionRef);
+				}, delayMs);
+			}
+
+			delayMs += pendingActionStaggerMs;
+		}
+	}
+
+	static function safeRun(fn:Void->Void):Void
+	{
+		try
+		{
+			fn();
+		}
+		catch (e:Dynamic)
+		{
+			CrasherLog.logWarning('Queued action failed: ${Std.string(e)}');
 		}
 	}
 
