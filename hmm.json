@@ -91,6 +91,11 @@
 			"name": "hxvlc",
 			"type": "haxelib",
 			"version": "2.3.0"
+		},
+		{
+			"name": "hxWindowColorMode",
+			"type": "haxelib",
+			"version": "0.2.1"
 		}
 	]
 }
