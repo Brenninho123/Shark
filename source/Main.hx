@@ -104,9 +104,16 @@ class Main extends Sprite
 		ImageCreator.initialize();
 
 		#if sys
-		extractBundledMods();
-		ModuleHandler.initialize();
-		Mods.initialize();
+		try
+		{
+			extractBundledMods();
+			ModuleHandler.initialize();
+			Mods.initialize();
+		}
+		catch (e:Dynamic)
+		{
+			CrasherLog.logWarning('Mod system failed to initialize, continuing without mods: ${Std.string(e)}');
+		}
 		#end
 
 		setupGame();
@@ -115,7 +122,14 @@ class Main extends Sprite
 		setupTouch();
 
 		#if sys
-		setupMods();
+		try
+		{
+			setupMods();
+		}
+		catch (e:Dynamic)
+		{
+			CrasherLog.logWarning('Mod update loop failed to start: ${Std.string(e)}');
+		}
 		#end
 
 		setupDiscord();
@@ -129,32 +143,39 @@ class Main extends Sprite
 	function extractBundledMods():Void
 	{
 		#if (sys && SHARK_HAS_BUNDLED_MODS)
-		if (!Module.ensureModsDirectory())
-			return;
-
-		var prefix:String = "assets/mods/";
-		var suffix:String = "." + Module.SCRIPT_EXTENSION;
-
-		for (path in openfl.utils.Assets.list())
+		try
 		{
-			if (!StringTools.startsWith(path, prefix) || !StringTools.endsWith(path, suffix))
-				continue;
+			if (!Module.ensureModsDirectory())
+				return;
 
-			var filename:String = path.substr(prefix.length);
-			var destPath:String = Module.getModsDirectory() + "/" + filename;
+			var prefix:String = "assets/mods/";
+			var suffix:String = "." + Module.SCRIPT_EXTENSION;
 
-			if (sys.FileSystem.exists(destPath))
-				continue;
-
-			try
+			for (path in openfl.utils.Assets.list())
 			{
-				var content:String = openfl.utils.Assets.getText(path);
-				sys.io.File.saveContent(destPath, content);
+				if (!StringTools.startsWith(path, prefix) || !StringTools.endsWith(path, suffix))
+					continue;
+
+				var filename:String = path.substr(prefix.length);
+				var destPath:String = Module.getModsDirectory() + "/" + filename;
+
+				if (sys.FileSystem.exists(destPath))
+					continue;
+
+				try
+				{
+					var content:String = openfl.utils.Assets.getText(path);
+					sys.io.File.saveContent(destPath, content);
+				}
+				catch (e:Dynamic)
+				{
+					CrasherLog.logWarning('Failed to extract bundled mod: $filename');
+				}
 			}
-			catch (e:Dynamic)
-			{
-				CrasherLog.logWarning('Failed to extract bundled mod: $filename');
-			}
+		}
+		catch (e:Dynamic)
+		{
+			CrasherLog.logWarning('Mod extraction failed entirely: ${Std.string(e)}');
 		}
 		#end
 	}
