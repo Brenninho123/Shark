@@ -149,6 +149,9 @@ class Project extends HXProject
 		if (target == WINDOWS)
 			haxelibs.push(new Haxelib("hxWindowColorMode"));
 
+		haxelibs.push(new Haxelib("hxmath"));
+		haxedefs.set("HXMATH_USE_OPENFL_STRUCTURES", "");
+
 		if (target == LINUX)
 			haxelibs.push(new Haxelib("hxgamemode"));
 
