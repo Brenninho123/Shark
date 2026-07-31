@@ -96,6 +96,11 @@
 			"name": "hxWindowColorMode",
 			"type": "haxelib",
 			"version": "0.2.1"
+		},
+		{
+			"name": "hxmath",
+			"type": "haxelib",
+			"version": "0.18.0"
 		}
 	]
 }
