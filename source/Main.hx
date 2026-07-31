@@ -31,6 +31,7 @@ import shark.ui.debug.CrasherLog;
 import shark.ui.debug.DebugDisplay;
 import shark.ui.discord.Discord;
 import shark.ui.input.Cursor;
+import shark.ui.window.WindowTheme;
 import shark.ui.security.Guard;
 import git.resolution.Resolution4K;
 import shark.backend.Mods;
@@ -496,6 +497,7 @@ class Main extends Sprite
 		FlxG.autoPause = true;
 
 		Cursor.initialize();
+		WindowTheme.initialize();
 
 		#if mobile
 		FlxG.scaleMode = new flixel.system.scaleModes.RatioScaleMode();
