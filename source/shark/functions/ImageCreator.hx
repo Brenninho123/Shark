@@ -4,6 +4,8 @@ import haxe.Json;
 import haxe.Timer;
 import haxe.crypto.Base64;
 import haxe.io.Bytes;
+import lime.manager.LimeManager;
+import openfl.display.Bitmap;
 import openfl.display.BitmapData;
 import openfl.display.Loader;
 import openfl.events.Event;
@@ -15,7 +17,6 @@ import shark.online.NetworkResponse;
 import shark.online.Online;
 import shark.online.User;
 import shark.ui.security.Guard;
-import lime.manager.LimeManager;
 
 typedef ImageRequest = {
 	prompt:String,
@@ -75,19 +76,22 @@ class ImageCreator
 
 		if (trimmed.length == 0)
 		{
-			onError("Image description is empty");
+			if (onError != null)
+				onError("Image description is empty");
 			return;
 		}
 
 		if (trimmed.length > maxPromptLength)
 		{
-			onError('Description exceeds $maxPromptLength characters');
+			if (onError != null)
+				onError('Description exceeds $maxPromptLength characters');
 			return;
 		}
 
 		if (requireOnline && !Online.isOnline)
 		{
-			onError("No internet connection");
+			if (onError != null)
+				onError("No internet connection");
 			return;
 		}
 
@@ -95,7 +99,8 @@ class ImageCreator
 
 		if (cacheEnabled && imageCache.exists(cacheKey))
 		{
-			onComplete(imageCache.get(cacheKey));
+			if (onComplete != null)
+				onComplete(imageCache.get(cacheKey));
 			return;
 		}
 
@@ -166,12 +171,16 @@ class ImageCreator
 		Network.postJson(endpoint, payload, headers, function(response:NetworkResponse):Void
 		{
 			if (request.token != currentToken)
+			{
+				finishRequest();
 				return;
+			}
 
 			if (!response.success)
 			{
-				request.onError(response.error);
-				finishRequest(request);
+				if (request.onError != null)
+					request.onError(response.error);
+				finishRequest();
 				return;
 			}
 
@@ -183,7 +192,10 @@ class ImageCreator
 				decodeBase64Image(base64Image, function(bitmap:BitmapData):Void
 				{
 					if (request.token != currentToken)
+					{
+						finishRequest();
 						return;
+					}
 
 					if (cacheEnabled)
 						cacheImage(buildCacheKey(request.prompt, request.width, request.height), bitmap);
@@ -191,23 +203,27 @@ class ImageCreator
 					if (autoSaveToStorage)
 						StorageUtil.saveImage(bitmap, generateFilename(request.prompt), function(_):Void {}, function(_):Void {}, request.prompt);
 
-					request.onComplete(bitmap);
-					finishRequest(request);
+					if (request.onComplete != null)
+						request.onComplete(bitmap);
+
+					finishRequest();
 				}, function(error:String):Void
 				{
-					request.onError(error);
-					finishRequest(request);
+					if (request.onError != null)
+						request.onError(error);
+					finishRequest();
 				});
 			}
 			catch (e:Dynamic)
 			{
-				request.onError(Std.string(e));
-				finishRequest(request);
+				if (request.onError != null)
+					request.onError(Std.string(e));
+				finishRequest();
 			}
 		}, null, maxRetries);
 	}
 
-	static function finishRequest(request:ImageRequest):Void
+	static function finishRequest():Void
 	{
 		if (queue.length > 0)
 			queue.shift();
@@ -218,7 +234,8 @@ class ImageCreator
 
 	static function generateFilename(prompt:String):String
 	{
-		var slug:String = prompt.length > 40 ? prompt.substr(0, 40) : prompt;
+		var cleanPrompt:String = ~/[^a-zA-Z0-9_-]/g.replace(prompt, "_");
+		var slug:String = cleanPrompt.length > 40 ? cleanPrompt.substr(0, 40) : cleanPrompt;
 		return 'shark_${Std.int(Timer.stamp())}_$slug';
 	}
 
@@ -232,13 +249,15 @@ class ImageCreator
 		}
 		catch (e:Dynamic)
 		{
-			onError("Invalid image data received");
+			if (onError != null)
+				onError("Invalid image data received");
 			return;
 		}
 
 		if (!Guard.isValidImagePayload(bytes))
 		{
-			onError("Image data failed integrity check");
+			if (onError != null)
+				onError("Image data failed integrity check");
 			return;
 		}
 
@@ -252,7 +271,8 @@ class ImageCreator
 				return;
 
 			finished = true;
-			onError("Image decoding timed out");
+			if (onError != null)
+				onError("Image decoding timed out");
 		}, decodeTimeoutMs);
 
 		loader.contentLoaderInfo.addEventListener(Event.COMPLETE, function(e:Event):Void
@@ -263,8 +283,16 @@ class ImageCreator
 			finished = true;
 			timeoutTimer.stop();
 
-			var bitmapData:BitmapData = cast(loader.content, openfl.display.Bitmap).bitmapData;
-			onComplete(bitmapData);
+			if (loader.content != null && Std.isOfType(loader.content, Bitmap))
+			{
+				var bitmapData:BitmapData = cast(loader.content, Bitmap).bitmapData;
+				if (onComplete != null)
+					onComplete(bitmapData);
+			}
+			else if (onError != null)
+			{
+				onError("Loaded content is not a valid Bitmap");
+			}
 		});
 
 		loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, function(e:IOErrorEvent):Void
@@ -274,7 +302,8 @@ class ImageCreator
 
 			finished = true;
 			timeoutTimer.stop();
-			onError(e.text);
+			if (onError != null)
+				onError(e.text);
 		});
 
 		loader.loadBytes(byteArray);
@@ -290,12 +319,23 @@ class ImageCreator
 		while (cacheOrder.length > maxCacheEntries)
 		{
 			var oldestKey:String = cacheOrder.shift();
-			imageCache.remove(oldestKey);
+			var oldBitmap:BitmapData = imageCache.get(oldestKey);
+			if (oldBitmap != null)
+			{
+				oldBitmap.dispose();
+				imageCache.remove(oldestKey);
+			}
 		}
 	}
 
 	public static function clearCache():Void
 	{
+		for (key in imageCache.keys())
+		{
+			var bmp:BitmapData = imageCache.get(key);
+			if (bmp != null)
+				bmp.dispose();
+		}
 		imageCache = new Map();
 		cacheOrder = [];
 	}
