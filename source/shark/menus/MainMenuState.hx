@@ -30,6 +30,7 @@ import shark.shaders.WaterShader;
 import lime.manager.LimeManager;
 
 import Main;
+import MainCpp;
 
 class MainMenuState extends FlxState
 {
@@ -155,6 +156,7 @@ class MainMenuState extends FlxState
 			Audio.playMusic("ocean_ambient");
 
 		createVersionTag();
+		createDevWatermark();
 		animateTitle();
 	}
 
@@ -263,6 +265,22 @@ class MainMenuState extends FlxState
 		var versionText = FlixelShark.makeText(0, FlxG.height - (isMobile ? 18 : 14), FlxG.width - 10, 'v${LimeManager.buildVersion}', 10, COLOR_ACCENT, RIGHT);
 		versionText.alpha = 0.5;
 		add(versionText);
+	}
+
+	function createDevWatermark():Void
+	{
+		#if SHARK_DEV_MODE
+		var label:String = 'Dev Build (Commit: ${MainCpp.BUILD_COMMIT})';
+
+		var watermark = FlixelShark.makeShadowText(0, 8, FlxG.width - 10, label, isMobile ? 14 : 11, 0xFFF87171, COLOR_ABYSS, RIGHT);
+		watermark.alpha = 0.8;
+		add(watermark);
+
+		FlxTween.tween(watermark, {alpha: 0.4}, 1.2, {
+			ease: FlxEase.sineInOut,
+			type: PINGPONG
+		});
+		#end
 	}
 
 	function animateTitle():Void
