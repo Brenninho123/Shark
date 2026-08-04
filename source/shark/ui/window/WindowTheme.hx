@@ -9,9 +9,9 @@ class WindowTheme
 	public static var isSupported(default, null):Bool;
 	public static var isDarkMode(default, null):Bool = true;
 
-	static inline var HEADER_COLOR:Array<Int> = [1, 17, 31];
-	static inline var BORDER_COLOR:Array<Int> = [97, 165, 194];
-	static inline var TITLE_COLOR:Array<Int> = [224, 251, 252];
+	static var HEADER_COLOR:Array<Int> = [1, 17, 31];
+	static var BORDER_COLOR:Array<Int> = [97, 165, 194];
+	static var TITLE_COLOR:Array<Int> = [224, 251, 252];
 
 	public static function initialize():Void
 	{
