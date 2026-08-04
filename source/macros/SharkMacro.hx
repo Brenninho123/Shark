@@ -53,6 +53,12 @@ class SharkMacro
 		return macro $v{value};
 	}
 
+	public static macro function isDevMode():Expr
+	{
+		var value:Bool = Context.defined("SHARK_DEV_MODE");
+		return macro $v{value};
+	}
+
 	public static macro function getBuildTimestamp():Expr
 	{
 		var timestamp:Float = Date.now().getTime();
