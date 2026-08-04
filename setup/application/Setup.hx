@@ -3,14 +3,31 @@ import sys.io.File;
 
 class Setup
 {
+	static inline var DEV_BRANCH_NAME:String = "dev";
+
 	static var repoRoot:String;
 
 	public static function main():Void
 	{
 		repoRoot = resolveRepoRoot();
 
+		var branch:String = resolveGitBranch();
+		var forced:Bool = Sys.args().indexOf("--force") != -1;
+
+		if (branch != DEV_BRANCH_NAME && !forced)
+		{
+			Sys.println('This setup script is meant for the "$DEV_BRANCH_NAME" branch only.');
+			Sys.println('Current branch: "$branch"');
+			Sys.println("");
+			Sys.println('Switch to the dev branch first (git checkout dev), or re-run with --force to run anyway:');
+			Sys.println("  haxe --run setup/application/Setup.hx --force");
+			Sys.exit(1);
+			return;
+		}
+
 		Sys.println("Shark project setup");
 		Sys.println("Repo root: " + repoRoot);
+		Sys.println('Branch: "$branch"' + (branch != DEV_BRANCH_NAME ? " (forced)" : ""));
 		Sys.println("");
 
 		var steps:Array<Void->Void> = [
@@ -31,6 +48,22 @@ class Setup
 
 		Sys.println("");
 		Sys.println("Setup finished. Review assets/data/config.json before building.");
+	}
+
+	static function resolveGitBranch():String
+	{
+		try
+		{
+			var process = new sys.io.Process("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+			var output:String = StringTools.trim(process.stdout.readAll().toString());
+			process.close();
+
+			return output.length > 0 ? output : "unknown";
+		}
+		catch (e:Dynamic)
+		{
+			return "unknown";
+		}
 	}
 
 	static function resolveRepoRoot():String
