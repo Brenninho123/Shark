@@ -7,10 +7,17 @@ class Project extends HXProject
 	static inline var APP_PACKAGE:String = "com.brenninho.shark";
 	static inline var APP_VERSION:String = "0.1.0";
 	static inline var APP_COMPANY:String = "Brenninho";
+	static inline var DEV_BRANCH_NAME:String = "dev";
+
+	var isDevBranch:Bool;
+	var gitBranch:String;
 
 	public function new()
 	{
 		super();
+
+		gitBranch = resolveGitBranch();
+		isDevBranch = gitBranch == DEV_BRANCH_NAME;
 
 		setupMeta();
 		setupApp();
@@ -40,6 +47,7 @@ class Project extends HXProject
 			default:
 		}
 
+		setupDevMode();
 		logBuildSummary();
 	}
 
@@ -53,7 +61,8 @@ class Project extends HXProject
 
 	function logBuildSummary():Void
 	{
-		Log.info('Shark ${meta.version} (build ${meta.buildNumber}, commit ${haxedefs.get("SHARK_COMMIT")}) -> $target, ${debug ? "debug" : "release"}');
+		var devTag:String = isDevBranch ? " [DEV BRANCH]" : "";
+		Log.info('Shark ${meta.version} (build ${meta.buildNumber}, commit ${haxedefs.get("SHARK_COMMIT")}, branch $gitBranch) -> $target, ${debug ? "debug" : "release"}$devTag');
 	}
 
 	function setupMeta():Void
@@ -224,6 +233,35 @@ class Project extends HXProject
 		{
 			return "unknown";
 		}
+	}
+
+	function resolveGitBranch():String
+	{
+		try
+		{
+			var process = new sys.io.Process("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+			var output:String = StringTools.trim(process.stdout.readAll().toString());
+			process.close();
+
+			return output.length > 0 ? output : "unknown";
+		}
+		catch (e:Dynamic)
+		{
+			return "unknown";
+		}
+	}
+
+	function setupDevMode():Void
+	{
+		if (!isDevBranch)
+			return;
+
+		haxedefs.set("SHARK_DEV_MODE", "");
+
+		meta.title = '$APP_TITLE (dev)';
+		window.background = 0xFF2A0A0A;
+
+		Log.info('On branch "$gitBranch" - SHARK_DEV_MODE enabled (dev-only window tint, title suffix).');
 	}
 
 	function setupOptimizations():Void
