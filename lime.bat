@@ -27,7 +27,6 @@ if /I "%~1"=="build" (
 if /I "%~1"=="release" (
 	if "%~2"=="" (
 		echo Usage: lime.bat release [windows^|android^|html5^|linux^|mac]
-		echo   Builds using Build.hxp instead of project.hxp - a stricter, CI-style profile.
 		exit /b 1
 	)
 	haxelib run lime build Build.hxp %~2 -final
@@ -36,7 +35,7 @@ if /I "%~1"=="release" (
 
 if /I "%~1"=="test" (
 	if "%~2"=="" (
-		echo Usage: lime.bat test [windows^|android^|html5]
+		echo Usage: lime.bat test [windows^|android^|html5^|linux^|mac]
 		exit /b 1
 	)
 	haxelib run lime test %~2
@@ -71,7 +70,7 @@ if /I "%~1"=="clean" (
 )
 
 if /I "%~1"=="doctor" (
-	echo Checking Haxe...
+	echo Checking Haxe version...
 	haxe -version
 	echo Checking installed haxelibs...
 	haxelib list
@@ -80,7 +79,7 @@ if /I "%~1"=="doctor" (
 
 if /I "%~1"=="mods" (
 	if not exist mods (
-		echo No mods folder yet - run "lime.bat setup" first.
+		echo Mods folder does not exist. Run "lime.bat setup" first.
 		exit /b 1
 	)
 	echo Opening mods folder...
@@ -93,7 +92,7 @@ if /I "%~1"=="version" (
 		if exist VERSION (
 			type VERSION
 		) else (
-			echo No VERSION file yet - run "lime.bat setup" first.
+			echo VERSION file not found. Run "lime.bat setup" first.
 		)
 		exit /b 0
 	)
@@ -104,19 +103,18 @@ if /I "%~1"=="version" (
 
 echo Unknown command: %~1
 echo.
-goto :menu
 
 :menu
 echo.
-echo Shark - Lime build helper
+echo Shark - Lime Build Helper
 echo ==========================
-echo   lime.bat setup               Install hmm, dependencies, set up Lime, run project bootstrap
-echo   lime.bat build ^<target^>      Build for a target using project.hxp (windows/android/html5/linux/mac)
-echo   lime.bat release ^<target^>    Build using Build.hxp (stricter CI-style profile)
-echo   lime.bat test ^<target^>       Build and run for a target
-echo   lime.bat clean [target]      Remove the export folder (all, or just one target)
-echo   lime.bat doctor              Print Haxe version and installed haxelibs
-echo   lime.bat mods                Open the mods folder
-echo   lime.bat version [x.y.z]     Show or set the VERSION file
+echo   lime.bat setup               
+echo   lime.bat build ^<target^>      
+echo   lime.bat release ^<target^>    
+echo   lime.bat test ^<target^>       
+echo   lime.bat clean [target]      
+echo   lime.bat doctor              
+echo   lime.bat mods                
+echo   lime.bat version [x.y.z]     
 echo.
 exit /b 0
