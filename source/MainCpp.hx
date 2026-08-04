@@ -13,6 +13,7 @@ class MainCpp
 	public static inline var BUILD_COMMIT:String = SharkMacro.getCommit();
 	public static inline var BUILD_PLATFORM:String = SharkMacro.getPlatform();
 	public static inline var IS_CI_BUILD:Bool = SharkMacro.isCiBuild();
+	public static inline var IS_DEV_MODE:Bool = SharkMacro.isDevMode();
 
 	static var nativeStartTimeMs:Float = -1;
 	static var checkpoints:Map<String, Float> = new Map();
