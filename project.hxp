@@ -8,8 +8,10 @@ class Project extends HXProject
 	static inline var APP_VERSION:String = "0.1.0";
 	static inline var APP_COMPANY:String = "Brenninho";
 	static inline var DEV_BRANCH_NAME:String = "dev";
+	static inline var MAIN_BRANCH_NAME:String = "main";
 
 	var isDevBranch:Bool;
+	var isMainBranch:Bool;
 	var gitBranch:String;
 
 	public function new()
@@ -18,6 +20,7 @@ class Project extends HXProject
 
 		gitBranch = resolveGitBranch();
 		isDevBranch = gitBranch == DEV_BRANCH_NAME;
+		isMainBranch = gitBranch == MAIN_BRANCH_NAME;
 
 		setupMeta();
 		setupApp();
@@ -48,6 +51,7 @@ class Project extends HXProject
 		}
 
 		setupDevMode();
+		setupProductionMode();
 		logBuildSummary();
 	}
 
@@ -262,6 +266,60 @@ class Project extends HXProject
 		window.background = 0xFF2A0A0A;
 
 		Log.info('On branch "$gitBranch" - SHARK_DEV_MODE enabled (dev-only window tint, title suffix).');
+	}
+
+	function setupProductionMode():Void
+	{
+		if (!isMainBranch)
+			return;
+
+		haxedefs.set("SHARK_PRODUCTION", "");
+
+		var checklist:Array<String> = [];
+		var failures:Array<String> = [];
+
+		checkProductionItem(checklist, failures, "config.json present", sys.FileSystem.exists("assets/data/config.json"), !debug);
+		checkProductionItem(checklist, failures, "VERSION format valid", isValidVersionFormat(meta.version), !debug);
+		checkProductionItem(checklist, failures, "no leftover dev define", !haxedefs.exists("SHARK_DEV_MODE"), false);
+
+		if (target == ANDROID && !debug)
+		{
+			var keystorePath:String = envOr("SHARK_KEYSTORE_PATH", "Certificates/android.keystore");
+			checkProductionItem(checklist, failures, 'Android keystore exists ($keystorePath)', sys.FileSystem.exists(keystorePath), true);
+		}
+
+		if (!debug)
+		{
+			haxeflags.push("-w");
+			checklist.push("[OK] strict warnings enabled");
+		}
+
+		Log.info('Production checklist (branch "$MAIN_BRANCH_NAME"):\n  ' + checklist.join("\n  "));
+
+		if (failures.length > 0 && !debug)
+		{
+			Log.error('Production build blocked - fix the following before building from $MAIN_BRANCH_NAME:\n  ' + failures.join("\n  "));
+			Sys.exit(1);
+		}
+	}
+
+	function checkProductionItem(checklist:Array<String>, failures:Array<String>, label:String, passed:Bool, isBlocking:Bool):Void
+	{
+		if (passed)
+		{
+			checklist.push('[OK] $label');
+			return;
+		}
+
+		if (isBlocking)
+		{
+			checklist.push('[FAIL] $label');
+			failures.push(label);
+		}
+		else
+		{
+			checklist.push('[WARN] $label');
+		}
 	}
 
 	function setupOptimizations():Void
