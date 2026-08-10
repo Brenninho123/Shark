@@ -116,6 +116,11 @@
 			"name": "newgrounds",
 			"type": "haxelib",
 			"version": "2.0.3"
+		},
+		{
+			"name": "extension-googleplaygames",
+			"type": "haxelib",
+			"version": "1.5.7"
 		}
 	]
 }
