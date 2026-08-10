@@ -281,6 +281,10 @@ class Project extends HXProject
 		checkProductionItem(checklist, failures, "config.json present", sys.FileSystem.exists("assets/data/config.json"), !debug);
 		checkProductionItem(checklist, failures, "VERSION format valid", isValidVersionFormat(meta.version), !debug);
 		checkProductionItem(checklist, failures, "no leftover dev define", !haxedefs.exists("SHARK_DEV_MODE"), false);
+		checkProductionItem(checklist, failures, "working tree clean (no uncommitted changes)", isWorkingTreeClean(), false);
+		checkProductionItem(checklist, failures, "no merge conflict markers in source/", !hasMergeConflictMarkers(), true);
+		checkProductionItem(checklist, failures, 'version "${meta.version}" has a matching git tag', hasMatchingGitTag(meta.version), false);
+		checkProductionItem(checklist, failures, 'CHANGELOG.md mentions "${meta.version}"', changelogMentionsVersion(meta.version), false);
 
 		if (target == ANDROID && !debug)
 		{
@@ -300,6 +304,92 @@ class Project extends HXProject
 		{
 			Log.error('Production build blocked - fix the following before building from $MAIN_BRANCH_NAME:\n  ' + failures.join("\n  "));
 			Sys.exit(1);
+		}
+	}
+
+	function isWorkingTreeClean():Bool
+	{
+		try
+		{
+			var process = new sys.io.Process("git", ["status", "--porcelain"]);
+			var output:String = StringTools.trim(process.stdout.readAll().toString());
+			process.close();
+
+			return output.length == 0;
+		}
+		catch (e:Dynamic)
+		{
+			return true;
+		}
+	}
+
+	function hasMergeConflictMarkers():Bool
+	{
+		return directoryContainsMarker("source", "<<<<<<< ");
+	}
+
+	function directoryContainsMarker(path:String, marker:String):Bool
+	{
+		if (!sys.FileSystem.exists(path))
+			return false;
+
+		for (entry in sys.FileSystem.readDirectory(path))
+		{
+			var fullPath:String = '$path/$entry';
+
+			if (sys.FileSystem.isDirectory(fullPath))
+			{
+				if (directoryContainsMarker(fullPath, marker))
+					return true;
+
+				continue;
+			}
+
+			if (!StringTools.endsWith(entry, ".hx") && !StringTools.endsWith(entry, ".hxp"))
+				continue;
+
+			try
+			{
+				var content:String = sys.io.File.getContent(fullPath);
+
+				if (content.indexOf(marker) != -1)
+					return true;
+			}
+			catch (e:Dynamic) {}
+		}
+
+		return false;
+	}
+
+	function hasMatchingGitTag(version:String):Bool
+	{
+		try
+		{
+			var process = new sys.io.Process("git", ["tag", "--list"]);
+			var output:String = process.stdout.readAll().toString();
+			process.close();
+
+			return output.indexOf(version) != -1 || output.indexOf('v$version') != -1;
+		}
+		catch (e:Dynamic)
+		{
+			return true;
+		}
+	}
+
+	function changelogMentionsVersion(version:String):Bool
+	{
+		if (!sys.FileSystem.exists("CHANGELOG.md"))
+			return true;
+
+		try
+		{
+			var content:String = sys.io.File.getContent("CHANGELOG.md");
+			return content.indexOf(version) != -1;
+		}
+		catch (e:Dynamic)
+		{
+			return true;
 		}
 	}
 
