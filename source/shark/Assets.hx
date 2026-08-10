@@ -1,15 +1,11 @@
 package shark;
 
 import shark.backend.Paths;
-import shark.modding.Module;
 import lime.manager.LimeManager;
 
 class Assets
 {
 	public static var isInitialized(default, null):Bool = false;
-	public static var modOverridesEnabled:Bool = true;
-
-	static var overrideCache:Map<String, Bool> = new Map();
 
 	public static function initialize():Void
 	{
@@ -32,52 +28,13 @@ class Assets
 
 	public static function resolveImagePath(key:String):String
 	{
-		var overridePath:String = getModAssetPath("images", key, "png");
-
-		if (overridePath != null)
-			return overridePath;
-
-		return Paths.image(key);
+		var overridePath:String = Paths.getModOverridePath("images", key, "png");
+		return overridePath != null ? overridePath : Paths.image(key);
 	}
 
-	public static function resolveSoundKeyIsOverridden(key:String):Bool
+	public static function isImageOverridden(key:String):Bool
 	{
-		return getModAssetPath("sounds", key, "ogg") != null || getModAssetPath("sounds", key, "mp3") != null;
-	}
-
-	static function getModAssetPath(category:String, key:String, extension:String):String
-	{
-		#if sys
-		if (!modOverridesEnabled)
-			return null;
-
-		var cacheKey:String = '$category/$key.$extension';
-
-		if (overrideCache.exists(cacheKey))
-		{
-			var cached:Bool = overrideCache.get(cacheKey);
-			return cached ? buildModAssetPath(category, key, extension) : null;
-		}
-
-		var path:String = buildModAssetPath(category, key, extension);
-		var exists:Bool = sys.FileSystem.exists(path);
-
-		overrideCache.set(cacheKey, exists);
-
-		return exists ? path : null;
-		#else
-		return null;
-		#end
-	}
-
-	static function buildModAssetPath(category:String, key:String, extension:String):String
-	{
-		return '${Module.getModsDirectory()}/assets/$category/$key.$extension';
-	}
-
-	public static function clearOverrideCache():Void
-	{
-		overrideCache = new Map();
+		return Paths.hasModOverride("images", key, "png");
 	}
 
 	public static function preloadCritical(keys:Array<String>, ?onProgress:Float->Void, ?onComplete:Void->Void):Void
@@ -93,6 +50,6 @@ class Assets
 	public static function forceClearAll(includePersistent:Bool = false):Void
 	{
 		Paths.clearCache(includePersistent);
-		clearOverrideCache();
+		Paths.clearModOverrideCache();
 	}
 }
