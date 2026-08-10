@@ -8,6 +8,7 @@ import openfl.display.BitmapData;
 import openfl.media.Sound;
 import openfl.text.Font;
 import shark.backend.JsonObject;
+import shark.modding.Module;
 
 import Main;
 
@@ -15,12 +16,15 @@ class Paths
 {
 	static inline var ASSET_ROOT:String = "assets";
 
+	public static var modOverridesEnabled:Bool = true;
+
 	static var graphicCache:Map<String, FlxGraphic> = new Map();
 	static var atlasCache:Map<String, FlxAtlasFrames> = new Map();
 	static var soundCache:Map<String, Sound> = new Map();
 	static var fontCache:Map<String, String> = new Map();
 	static var textCache:Map<String, String> = new Map();
 	static var existsCache:Map<String, Bool> = new Map();
+	static var modOverrideCache:Map<String, Bool> = new Map();
 
 	static var persistentKeys:Map<String, Bool> = new Map();
 
@@ -87,10 +91,50 @@ class Paths
 		#end
 	}
 
+	public static function getModOverridePath(category:String, key:String, extension:String):String
+	{
+		#if sys
+		if (!modOverridesEnabled)
+			return null;
+
+		var cacheKeyPath:String = '$category/$key.$extension';
+
+		if (modOverrideCache.exists(cacheKeyPath))
+			return modOverrideCache.get(cacheKeyPath) ? buildModOverridePath(category, key, extension) : null;
+
+		var path:String = buildModOverridePath(category, key, extension);
+		var found:Bool = sys.FileSystem.exists(path);
+
+		modOverrideCache.set(cacheKeyPath, found);
+
+		return found ? path : null;
+		#else
+		return null;
+		#end
+	}
+
+	static function buildModOverridePath(category:String, key:String, extension:String):String
+	{
+		return '${Module.getModsDirectory()}/assets/$category/$key.$extension';
+	}
+
+	public static function hasModOverride(category:String, key:String, extension:String):Bool
+	{
+		return getModOverridePath(category, key, extension) != null;
+	}
+
+	public static function clearModOverrideCache():Void
+	{
+		modOverrideCache = new Map();
+	}
+
 	public static function getGraphic(key:String, persist:Bool = false, checkCompressed:Bool = false):FlxGraphic
 	{
 		if (graphicCache.exists(key))
 			return graphicCache.get(key);
+
+		if (hasModOverride("images", key, "png"))
+			shark.ui.debug.CrasherLog.logWarning('Mod override found for image "$key" - use getGraphicAsync() to actually load it (synchronous getGraphic() cannot load external mod files)');
 
 		if (checkCompressed && shouldUseAstc(key))
 			shark.ui.debug.CrasherLog.logWarning('ASTC variant found for "$key" but GPU texture upload is not implemented yet; using PNG fallback');
@@ -110,6 +154,49 @@ class Paths
 			persistentKeys.set(key, true);
 
 		return graphic;
+	}
+
+	public static function getGraphicAsync(key:String, onComplete:FlxGraphic->Void, persist:Bool = false):Void
+	{
+		if (graphicCache.exists(key))
+		{
+			onComplete(graphicCache.get(key));
+			return;
+		}
+
+		var overridePath:String = getModOverridePath("images", key, "png");
+
+		if (overridePath == null)
+		{
+			onComplete(getGraphic(key, persist));
+			return;
+		}
+
+		#if sys
+		BitmapData.load(overridePath).onComplete(function(bitmapData:BitmapData):Void
+		{
+			if (bitmapData == null)
+			{
+				onComplete(getGraphic(key, persist));
+				return;
+			}
+
+			var graphic:FlxGraphic = FlxGraphic.fromBitmapData(bitmapData, false, 'mod:$key');
+			graphic.persist = persist;
+
+			graphicCache.set(key, graphic);
+
+			if (persist)
+				persistentKeys.set(key, true);
+
+			onComplete(graphic);
+		}).onError(function(_):Void
+		{
+			onComplete(getGraphic(key, persist));
+		});
+		#else
+		onComplete(getGraphic(key, persist));
+		#end
 	}
 
 	public static function getSparrowAtlas(key:String, persist:Bool = false):FlxAtlasFrames
@@ -180,6 +267,21 @@ class Paths
 
 		if (textCache.exists(cacheKey))
 			return textCache.get(cacheKey);
+
+		var overridePath:String = getModOverridePath("data", key, extension);
+
+		#if sys
+		if (overridePath != null)
+		{
+			try
+			{
+				var overrideContent:String = sys.io.File.getContent(overridePath);
+				textCache.set(cacheKey, overrideContent);
+				return overrideContent;
+			}
+			catch (e:Dynamic) {}
+		}
+		#end
 
 		var path:String = extension == "json" ? data(key) : file(key, extension);
 
@@ -393,6 +495,7 @@ class Paths
 
 		textCache = new Map();
 		existsCache = new Map();
+		modOverrideCache = new Map();
 
 		if (includePersistent)
 			persistentKeys = new Map();
