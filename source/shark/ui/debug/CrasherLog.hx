@@ -2,6 +2,7 @@ package shark.ui.debug;
 
 import haxe.Json;
 import lime.manager.LimeManager;
+import shark.FileSys;
 
 #if sys
 import sys.io.File;
@@ -15,7 +16,8 @@ typedef CrashEntry = {
 	severity:String,
 	platform:String,
 	buildSummary:String,
-	?count:Int
+	?count:Int,
+	?category:String
 }
 
 class CrasherLog
@@ -24,18 +26,20 @@ class CrasherLog
 	static inline var MAX_ENTRIES:Int = 200;
 	static inline var DEDUPLICATION_WINDOW_SECONDS:Float = 5;
 	static inline var MAX_MESSAGE_LENGTH:Int = 500;
+	static inline var DEFAULT_CATEGORY:String = "general";
 
 	public static var recentCrashes(default, null):Array<CrashEntry> = [];
 	public static var totalCrashCount(default, null):Int = 0;
 
 	static var loaded:Bool = false;
 
-	public static function log(message:String, severity:String = "error"):Void
+	public static function log(message:String, severity:String = "error", category:String = DEFAULT_CATEGORY):Void
 	{
 		ensureLoaded();
 
 		var sanitized:String = sanitizeMessage(message);
 		var now:Float = Date.now().getTime() / 1000;
+		var effectiveCategory:String = category != null ? category : DEFAULT_CATEGORY;
 
 		totalCrashCount++;
 
@@ -43,7 +47,8 @@ class CrasherLog
 		{
 			var last:CrashEntry = recentCrashes[recentCrashes.length - 1];
 
-			if (last.message == sanitized && last.severity == severity && (now - last.timestamp) < DEDUPLICATION_WINDOW_SECONDS)
+			if (last.message == sanitized && last.severity == severity && last.category == effectiveCategory
+				&& (now - last.timestamp) < DEDUPLICATION_WINDOW_SECONDS)
 			{
 				last.count = (last.count == null ? 1 : last.count) + 1;
 				last.timestamp = now;
@@ -58,7 +63,8 @@ class CrasherLog
 			severity: severity,
 			platform: LimeManager.getPlatformName(),
 			buildSummary: LimeManager.getBuildSummary(),
-			count: 1
+			count: 1,
+			category: effectiveCategory
 		};
 
 		recentCrashes.push(entry);
@@ -69,19 +75,19 @@ class CrasherLog
 		persist();
 	}
 
-	public static function logError(message:String):Void
+	public static function logError(message:String, category:String = DEFAULT_CATEGORY):Void
 	{
-		log(message, "error");
+		log(message, "error", category);
 	}
 
-	public static function logSecurity(message:String):Void
+	public static function logSecurity(message:String, category:String = DEFAULT_CATEGORY):Void
 	{
-		log(message, "security");
+		log(message, "security", category);
 	}
 
-	public static function logWarning(message:String):Void
+	public static function logWarning(message:String, category:String = DEFAULT_CATEGORY):Void
 	{
-		log(message, "warning");
+		log(message, "warning", category);
 	}
 
 	static function sanitizeMessage(message:String):String
@@ -151,6 +157,52 @@ class CrasherLog
 		persist();
 	}
 
+	public static function getEntriesByCategory(category:String):Array<CrashEntry>
+	{
+		ensureLoaded();
+
+		var results:Array<CrashEntry> = [];
+
+		for (entry in recentCrashes)
+			if (entry.category == category)
+				results.push(entry);
+
+		return results;
+	}
+
+	public static function getEntriesBySeverity(severity:String):Array<CrashEntry>
+	{
+		ensureLoaded();
+
+		var results:Array<CrashEntry> = [];
+
+		for (entry in recentCrashes)
+			if (entry.severity == severity)
+				results.push(entry);
+
+		return results;
+	}
+
+	public static function getCategorySummary():String
+	{
+		ensureLoaded();
+
+		var counts:Map<String, Int> = new Map();
+
+		for (entry in recentCrashes)
+		{
+			var category:String = entry.category != null ? entry.category : DEFAULT_CATEGORY;
+			counts.set(category, (counts.exists(category) ? counts.get(category) : 0) + 1);
+		}
+
+		var lines:Array<String> = [];
+
+		for (category => count in counts)
+			lines.push('$category: $count');
+
+		return lines.length > 0 ? lines.join(", ") : "no entries";
+	}
+
 	public static function getFormattedReport(maxEntries:Int = 20):String
 	{
 		ensureLoaded();
@@ -165,11 +217,22 @@ class CrasherLog
 		{
 			var entry:CrashEntry = recentCrashes[i];
 			var countTag:String = entry.count != null && entry.count > 1 ? ' (x${entry.count})' : "";
+			var categoryTag:String = entry.category != null ? '[${entry.category}] ' : "";
 
-			lines.push('[${entry.severity}] ${entry.message}$countTag - ${entry.buildSummary}');
+			lines.push('$categoryTag[${entry.severity}] ${entry.message}$countTag - ${entry.buildSummary}');
 		}
 
 		return lines.join("\n");
+	}
+
+	public static function exportReport(?destPath:String):Bool
+	{
+		ensureLoaded();
+
+		var path:String = destPath != null ? destPath : (getLogPath() + ".report.txt");
+		var header:String = 'Shark crash report - ${Date.now().toString()}\nTotal entries: $totalCrashCount\nBy category: ${getCategorySummary()}\n\n';
+
+		return FileSys.writeText(path, header + getFormattedReport(recentCrashes.length));
 	}
 
 	public static function getRecentCount(windowSeconds:Float):Int
