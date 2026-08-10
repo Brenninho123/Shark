@@ -9,15 +9,19 @@ import flixel.util.FlxColor;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
+import flixel.FlixelShark;
+import git.graphic.GraphicGit;
+import git.resolution.Resolution4K;
 import shark.active.games.BubblePopState;
 import shark.active.games.ReefRunnerState;
 import shark.active.games.DeepDiveState;
+import shark.backend.Language;
 import shark.menus.MainMenuState;
 
 typedef GameEntry = {
 	id:String,
-	title:String,
-	description:String,
+	titleKey:String,
+	descriptionKey:String,
 	icon:String,
 	accentColor:FlxColor,
 	?stateClass:Class<FlxState>
@@ -38,24 +42,24 @@ class GameState extends FlxState
 	var games:Array<GameEntry> = [
 		{
 			id: "bubble_pop",
-			title: "Bubble Pop",
-			description: "Pop rising bubbles before they escape.",
+			titleKey: "games.bubblePop",
+			descriptionKey: "games.bubblePopDescription",
 			icon: "o O o",
 			accentColor: COLOR_BUBBLE,
 			stateClass: BubblePopState
 		},
 		{
 			id: "reef_runner",
-			title: "Reef Runner",
-			description: "Dodge obstacles swimming through the reef.",
+			titleKey: "games.reefRunner",
+			descriptionKey: "games.reefRunnerDescription",
 			icon: ">>>",
 			accentColor: COLOR_REEF,
 			stateClass: ReefRunnerState
 		},
 		{
 			id: "deep_dive",
-			title: "Deep Dive",
-			description: "See how far you can dive before hitting a rock.",
+			titleKey: "games.deepDive",
+			descriptionKey: "games.deepDiveDescription",
 			icon: "\\ /",
 			accentColor: COLOR_ACCENT,
 			stateClass: DeepDiveState
@@ -80,97 +84,27 @@ class GameState extends FlxState
 		isMobile = FlxG.onMobile;
 		bgColor = COLOR_ABYSS;
 
-		createDepthGradient();
-		createLightRays();
-		createKelp();
-		createBubbles();
+		FlixelShark.createDepthGradient(this, [COLOR_ABYSS, COLOR_DEEP, COLOR_MID]);
+		lightRays = FlixelShark.createLightRays(this, isMobile ? 3 : 5, COLOR_FOAM);
+		kelpBlades = FlixelShark.createKelpField(this, isMobile ? 4 : 7, COLOR_KELP);
+		bubbles = FlixelShark.createBubbleField(this, isMobile ? 6 : 10, COLOR_ACCENT);
 
-		titleText = new FlxText(0, isMobile ? 26 : 18, FlxG.width, "SELECT A GAME");
-		titleText.setFormat(null, isMobile ? 34 : 28, COLOR_FOAM, CENTER);
-		titleText.setBorderStyle(SHADOW, COLOR_ACCENT, 2);
+		titleText = FlixelShark.makeLocalizedShadowText(0, isMobile ? 26 : 18, FlxG.width, "games.title", isMobile ? 34 : 28, COLOR_FOAM, COLOR_ACCENT,
+			CENTER);
 		add(titleText);
 
-		subtitleText = new FlxText(0, titleText.y + titleText.height + 2, FlxG.width, "type !play in chat anytime to come back here");
-		subtitleText.setFormat(null, isMobile ? 14 : 12, COLOR_ACCENT, CENTER);
+		subtitleText = FlixelShark.makeLocalizedText(0, titleText.y + titleText.height + 2, FlxG.width, "games.subtitle", isMobile ? 14 : 12, COLOR_ACCENT,
+			CENTER);
 		add(subtitleText);
 
 		createGameList();
 
-		backButton = new FlxButton(20, FlxG.height - (isMobile ? 70 : 50), "Back", onBackPressed);
-		backButton.setSize(isMobile ? 120 : 90, isMobile ? 50 : 32);
-		backButton.color = COLOR_MID;
-		backButton.label.color = COLOR_FOAM;
+		backButton = FlixelShark.makeLocalizedButton(20, FlxG.height - (isMobile ? 70 : 50), "menu.backButton", onBackPressed, isMobile ? 120 : 90,
+			isMobile ? 50 : 32, COLOR_MID, COLOR_FOAM);
 		backButton.alpha = 0;
 		add(backButton);
 
 		FlxTween.tween(backButton, {alpha: 1}, 0.4, {startDelay: 0.2 + games.length * 0.1});
-	}
-
-	function createDepthGradient():Void
-	{
-		var bands:Array<FlxColor> = [COLOR_ABYSS, COLOR_DEEP, COLOR_MID];
-		var bandHeight:Int = Std.int(FlxG.height / bands.length) + 2;
-
-		for (i in 0...bands.length)
-		{
-			var band = new FlxSprite(0, i * bandHeight);
-			band.makeGraphic(FlxG.width, bandHeight, bands[i]);
-			band.scrollFactor.set(0, 0);
-			add(band);
-		}
-	}
-
-	function createLightRays():Void
-	{
-		var rayCount:Int = isMobile ? 3 : 5;
-
-		for (i in 0...rayCount)
-		{
-			var ray = new FlxSprite(Std.random(FlxG.width), -100);
-			ray.makeGraphic(30 + Std.random(20), FlxG.height + 200, COLOR_FOAM);
-			ray.angle = -15;
-			ray.alpha = 0.03 + Std.random(4) / 100;
-			ray.scrollFactor.set(0, 0);
-			add(ray);
-			lightRays.push(ray);
-
-			FlxTween.tween(ray, {x: ray.x + 60}, 8 + Std.random(4), {
-				ease: FlxEase.sineInOut,
-				type: PINGPONG
-			});
-		}
-	}
-
-	function createKelp():Void
-	{
-		var bladeCount:Int = isMobile ? 4 : 7;
-
-		for (i in 0...bladeCount)
-		{
-			var height:Int = 30 + Std.random(50);
-			var blade = new FlxSprite((i / bladeCount) * FlxG.width + Std.random(20), FlxG.height - height);
-			blade.makeGraphic(8, height, COLOR_KELP);
-			blade.alpha = 0.4;
-			blade.origin.set(4, height);
-			add(blade);
-
-			kelpBlades.push({sprite: blade, offset: Std.random(6283) / 1000, speed: 1 + Std.random(50) / 100});
-		}
-	}
-
-	function createBubbles():Void
-	{
-		var bubbleCount:Int = isMobile ? 6 : 10;
-
-		for (i in 0...bubbleCount)
-		{
-			var size:Int = 3 + Std.random(8);
-			var bubble = new FlxSprite(Std.random(FlxG.width), FlxG.height + Std.random(200));
-			bubble.makeGraphic(size, size, COLOR_ACCENT);
-			bubble.alpha = 0.25 + Std.random(30) / 100;
-			add(bubble);
-			bubbles.push(bubble);
-		}
 	}
 
 	function createGameList():Void
@@ -189,43 +123,29 @@ class GameState extends FlxState
 			var entry:GameEntry = games[i];
 			var cardY:Float = startY + i * spacing;
 
-			var shadow = new FlxSprite(cardX + 4, cardY + 4).makeGraphic(Std.int(cardWidth), Std.int(cardHeight), COLOR_ABYSS);
-			shadow.alpha = 0.4;
-			add(shadow);
+			var card:FlxSprite = FlixelShark.createRoundedCard(this, cardX, cardY, cardWidth, cardHeight, COLOR_MID, entry.accentColor, 10, COLOR_ABYSS);
 
-			var card = new FlxSprite(cardX, cardY).makeGraphic(Std.int(cardWidth), Std.int(cardHeight), COLOR_MID);
-			add(card);
-
-			var accentBar = new FlxSprite(cardX, cardY).makeGraphic(6, Std.int(cardHeight), entry.accentColor);
-			add(accentBar);
-
-			var iconBadge = new FlxSprite(cardX + 20, cardY + cardHeight / 2 - 18).makeGraphic(36, 36, entry.accentColor);
+			var iconBadge = GraphicGit.makeRoundedRectSprite(cardX + 20, cardY + cardHeight / 2 - 18, 36, 36, entry.accentColor, 8, 0.85);
 			add(iconBadge);
 
-			var iconLabel = new FlxText(cardX + 20, cardY + cardHeight / 2 - 18, 36, entry.icon);
-			iconLabel.setFormat(null, 10, COLOR_ABYSS, CENTER);
+			var iconLabel = FlixelShark.makeText(cardX + 20, cardY + cardHeight / 2 - 18, 36, entry.icon, Resolution4K.scaledInt(10), COLOR_ABYSS, CENTER);
 			add(iconLabel);
 
-			var titleLabel = new FlxText(cardX + 70, cardY + 12, cardWidth - 90, entry.title);
-			titleLabel.setFormat(null, isMobile ? 22 : 18, COLOR_FOAM, LEFT);
+			var titleLabel = FlixelShark.makeLocalizedText(cardX + 70, cardY + 12, cardWidth - 90, entry.titleKey, Resolution4K.scaledInt(isMobile ? 22 : 18),
+				COLOR_FOAM, LEFT);
 			add(titleLabel);
 
-			var descLabel = new FlxText(cardX + 70, cardY + 12 + (isMobile ? 28 : 24), cardWidth - 190, entry.description);
-			descLabel.setFormat(null, isMobile ? 13 : 12, COLOR_ACCENT, LEFT);
+			var descLabel = FlixelShark.makeLocalizedText(cardX + 70, cardY + 12 + (isMobile ? 28 : 24), cardWidth - 190, entry.descriptionKey,
+				Resolution4K.scaledInt(isMobile ? 13 : 12), COLOR_ACCENT, LEFT);
 			add(descLabel);
 
-			var playButton = new FlxButton(cardX + cardWidth - (isMobile ? 100 : 80), cardY + cardHeight / 2 - (isMobile ? 22 : 16), "Play",
-				makeSelectHandler(entry));
-			playButton.setSize(isMobile ? 80 : 64, isMobile ? 44 : 32);
-			playButton.color = entry.accentColor;
-			playButton.label.color = COLOR_ABYSS;
+			var playButton = FlixelShark.makeDebouncedButton(cardX + cardWidth - (isMobile ? 100 : 80), cardY + cardHeight / 2 - (isMobile ? 22 : 16), "Play",
+				makeSelectHandler(entry), isMobile ? 80 : 64, isMobile ? 44 : 32, entry.accentColor, COLOR_ABYSS);
 			buttonGroup.add(playButton);
 
 			var delay:Float = i * 0.1;
 
-			animateCardElement(shadow, 0.4, delay);
 			animateCardElement(card, 0.35, delay);
-			animateCardElement(accentBar, 0.9, delay);
 			animateCardElement(iconBadge, 0.85, delay);
 			animateCardElement(iconLabel, 1, delay);
 			animateCardElement(titleLabel, 1, delay);
@@ -233,7 +153,6 @@ class GameState extends FlxState
 			animateCardElement(playButton, 1, delay);
 
 			cardSprites.push({sprite: card, baseY: cardY, offset: Std.random(6283) / 1000});
-			cardSprites.push({sprite: accentBar, baseY: cardY, offset: cardSprites[cardSprites.length - 1].offset});
 		}
 	}
 
@@ -260,36 +179,19 @@ class GameState extends FlxState
 	function onGameSelected(entry:GameEntry):Void
 	{
 		if (entry.stateClass != null)
-		{
-			FlxG.switchState(Type.createInstance(entry.stateClass, []));
-			return;
-		}
+			FlixelShark.safeSwitchState(Type.createInstance(entry.stateClass, []));
 	}
 
 	override public function update(elapsed:Float):Void
 	{
 		super.update(elapsed);
 
-		for (bubble in bubbles)
-		{
-			bubble.y -= elapsed * (18 + bubble.width * 4);
-
-			if (bubble.y < -bubble.height)
-			{
-				bubble.y = FlxG.height + Std.random(100);
-				bubble.x = Std.random(FlxG.width);
-			}
-		}
-
-		for (blade in kelpBlades)
-		{
-			blade.offset += elapsed * blade.speed;
-			blade.sprite.angle = Math.sin(blade.offset) * 5;
-		}
+		FlixelShark.updateBubbleField(bubbles, elapsed);
+		FlixelShark.updateKelpField(kelpBlades, elapsed);
 	}
 
 	function onBackPressed():Void
 	{
-		FlxG.switchState(new MainMenuState());
+		FlixelShark.safeSwitchState(new MainMenuState());
 	}
 }
