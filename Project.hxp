@@ -168,6 +168,8 @@ class Project extends HXProject
 		haxelibs.push(new Haxelib("haxeui-core"));
 		haxelibs.push(new Haxelib("haxeui-flixel"));
 
+		haxelibs.push(new Haxelib("newgrounds"));
+
 		if (target == LINUX)
 			haxelibs.push(new Haxelib("hxgamemode"));
 
