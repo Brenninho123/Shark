@@ -101,6 +101,16 @@
 			"name": "hxmath",
 			"type": "haxelib",
 			"version": "0.18.0"
+		},
+		{
+			"name": "haxeui-core",
+			"type": "haxelib",
+			"version": "1.7.0"
+		},
+		{
+			"name": "haxeui-flixel",
+			"type": "haxelib",
+			"version": "1.7.0"
 		}
 	]
 }
