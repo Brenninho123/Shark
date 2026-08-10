@@ -179,6 +179,8 @@ class Project extends HXProject
 		if (target == LINUX)
 			haxelibs.push(new Haxelib("hxgamemode"));
 
+		haxelibs.push(new Haxelib("flxanimate"));
+
 		if (debug)
 		{
 			haxelibs.push(new Haxelib("munit"));
