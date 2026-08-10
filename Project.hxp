@@ -165,6 +165,9 @@ class Project extends HXProject
 		haxelibs.push(new Haxelib("hxmath"));
 		haxedefs.set("HXMATH_USE_OPENFL_STRUCTURES", "");
 
+		haxelibs.push(new Haxelib("haxeui-core"));
+		haxelibs.push(new Haxelib("haxeui-flixel"));
+
 		if (target == LINUX)
 			haxelibs.push(new Haxelib("hxgamemode"));
 
