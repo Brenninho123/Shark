@@ -176,6 +176,17 @@ class Project extends HXProject
 			config.set("android.setenv.GOOGLE_PLAY_GAMES_ID", envOr("SHARK_GPG_ID", "0"));
 		}
 
+		if (target == ANDROID || target == IOS)
+		{
+			haxelibs.push(new Haxelib("extension-admob"));
+
+			if (target == ANDROID)
+				config.set("android.setenv.ADMOB_APPID", envOr("SHARK_ADMOB_APPID_ANDROID", "ca-app-pub-3940256099942544~3347511713"));
+
+			if (target == IOS)
+				config.set("ios.setenv.ADMOB_APPID", envOr("SHARK_ADMOB_APPID_IOS", "ca-app-pub-3940256099942544~1458002511"));
+		}
+
 		if (target == LINUX)
 			haxelibs.push(new Haxelib("hxgamemode"));
 
