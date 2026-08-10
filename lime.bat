@@ -185,6 +185,16 @@ if /I "%~1"=="mods" (
 	exit /b 0
 )
 
+if /I "%~1"=="astc" (
+	if not exist assets\images (
+		echo No assets\images folder found.
+		exit /b 1
+	)
+	echo Compressing assets\images to assets\images\astc ...
+	haxelib run astc-compressor compress -i assets\images -blocksize 6x6 -quality medium -colorprofile cl -o assets\images\astc
+	exit /b %errorlevel%
+)
+
 if /I "%~1"=="version" (
 	if "%~2"=="" (
 		if exist VERSION (
@@ -218,6 +228,7 @@ echo   lime.bat test ^<target^>       Build and run for a target
 echo   lime.bat clean [target]      Remove the export folder ^(all, or just one target^)
 echo   lime.bat doctor              Print Haxe version and installed haxelibs
 echo   lime.bat mods                Open the mods folder
+echo   lime.bat astc                Compress assets\images to ASTC textures (assets\images\astc)
 echo   lime.bat version [x.y.z]     Show or set the VERSION file
 echo.
 exit /b 0
