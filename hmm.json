@@ -121,6 +121,11 @@
 			"name": "extension-googleplaygames",
 			"type": "haxelib",
 			"version": "1.5.7"
+		},
+		{
+			"name": "flxanimate",
+			"type": "haxelib",
+			"version": "4.0.0"
 		}
 	]
 }
