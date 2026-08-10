@@ -20,11 +20,63 @@ import shark.shaders.WaterShader;
 
 class FlixelShark
 {
+	public static inline var MAX_SPRITE_DIMENSION:Int = 4096;
+	public static inline var MIN_SPRITE_DIMENSION:Int = 1;
+	public static inline var MAX_TEXT_LENGTH:Int = 5000;
+	public static var defaultButtonCooldownMs:Float = 350;
+
 	public static function makeSprite(x:Float, y:Float, width:Int, height:Int, color:FlxColor, alpha:Float = 1):FlxSprite
 	{
 		var sprite = new FlxSprite(x, y).makeGraphic(width, height, color);
 		sprite.alpha = alpha;
 		return sprite;
+	}
+
+	public static function makeSafeSprite(x:Float, y:Float, width:Int, height:Int, color:FlxColor, alpha:Float = 1):FlxSprite
+	{
+		return makeSprite(x, y, clampDimension(width), clampDimension(height), color, clampAlpha(alpha));
+	}
+
+	static function clampDimension(value:Int):Int
+	{
+		if (value < MIN_SPRITE_DIMENSION)
+			return MIN_SPRITE_DIMENSION;
+
+		if (value > MAX_SPRITE_DIMENSION)
+			return MAX_SPRITE_DIMENSION;
+
+		return value;
+	}
+
+	static function clampAlpha(value:Float):Float
+	{
+		if (Math.isNaN(value))
+			return 1;
+
+		if (value < 0)
+			return 0;
+
+		if (value > 1)
+			return 1;
+
+		return value;
+	}
+
+	public static function truncateText(text:String, maxLength:Int = MAX_TEXT_LENGTH):String
+	{
+		if (text == null)
+			return "";
+
+		if (text.length <= maxLength)
+			return text;
+
+		return text.substr(0, maxLength) + "...";
+	}
+
+	public static function makeSafeText(x:Float, y:Float, width:Float, text:String, size:Int = 16, color:FlxColor = FlxColor.WHITE,
+			alignment:FlxTextAlign = LEFT):FlxText
+	{
+		return makeText(x, y, width, truncateText(text), size, color, alignment);
 	}
 
 	public static function makeStaticSprite(x:Float, y:Float, width:Int, height:Int, color:FlxColor, alpha:Float = 1):FlxSprite
@@ -358,6 +410,62 @@ class FlixelShark
 				bubble.x = Std.random(FlxG.width);
 			}
 		}
+	}
+
+	static var lastClickTimes:Map<FlxButton, Float> = new Map();
+
+	public static function makeDebouncedButton(x:Float, y:Float, label:String, onClick:Void->Void, ?width:Int, ?height:Int, bgColor:FlxColor = FlxColor.GRAY,
+			textColor:FlxColor = FlxColor.WHITE, cooldownMs:Float = -1):FlxButton
+	{
+		var effectiveCooldown:Float = cooldownMs > 0 ? cooldownMs : defaultButtonCooldownMs;
+		var button:FlxButton = null;
+
+		var wrappedClick = function():Void
+		{
+			var now:Float = haxe.Timer.stamp() * 1000;
+			var lastClick:Float = lastClickTimes.exists(button) ? lastClickTimes.get(button) : -1;
+
+			if (lastClick >= 0 && now - lastClick < effectiveCooldown)
+				return;
+
+			lastClickTimes.set(button, now);
+
+			if (onClick != null)
+				onClick();
+		};
+
+		button = makeButton(x, y, label, wrappedClick, width, height, bgColor, textColor);
+
+		return button;
+	}
+
+	public static function wrapDebounced(button:FlxButton, onClick:Void->Void, cooldownMs:Float = -1):Void->Void
+	{
+		var effectiveCooldown:Float = cooldownMs > 0 ? cooldownMs : defaultButtonCooldownMs;
+
+		return function():Void
+		{
+			var now:Float = haxe.Timer.stamp() * 1000;
+			var lastClick:Float = lastClickTimes.exists(button) ? lastClickTimes.get(button) : -1;
+
+			if (lastClick >= 0 && now - lastClick < effectiveCooldown)
+				return;
+
+			lastClickTimes.set(button, now);
+
+			if (onClick != null)
+				onClick();
+		};
+	}
+
+	public static function safeSwitchState(newState:FlxState, useTransition:Bool = true, transitionDuration:Float = 0.4,
+			transitionColor:FlxColor = FlxColor.BLACK):Bool
+	{
+		if (newState == null)
+			return false;
+
+		switchState(newState, useTransition, transitionDuration, transitionColor);
+		return true;
 	}
 
 	public static function switchState(newState:FlxState, useTransition:Bool = true, transitionDuration:Float = 0.4, transitionColor:FlxColor = FlxColor.BLACK):Void
