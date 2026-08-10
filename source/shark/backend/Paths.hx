@@ -173,7 +173,7 @@ class Paths
 		}
 
 		#if sys
-		BitmapData.load(overridePath).onComplete(function(bitmapData:BitmapData):Void
+		BitmapData.loadFromFile(overridePath).onComplete(function(bitmapData:BitmapData):Void
 		{
 			if (bitmapData == null)
 			{
