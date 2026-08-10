@@ -59,6 +59,8 @@ class Content
 		if (bitmapData == null)
 			return false;
 
+		ensureContentFolder();
+
 		var safeName:String = Guard.isSafeFilename(filename) ? filename : sanitizeFilename(filename);
 
 		try
