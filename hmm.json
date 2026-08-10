@@ -126,6 +126,13 @@
 			"name": "flxanimate",
 			"type": "haxelib",
 			"version": "4.0.0"
+		},
+		{
+			"name": "astc-compressor",
+			"type": "git",
+			"dir": null,
+			"ref": null,
+			"url": "https://github.com/KarimAkra/astc-compressor.git"
 		}
 	]
 }
