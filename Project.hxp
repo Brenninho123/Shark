@@ -294,8 +294,7 @@ class Project extends HXProject
 
 		if (!debug)
 		{
-			haxeflags.push("-w");
-			checklist.push("[OK] strict warnings enabled");
+			checklist.push("[OK] release optimizations active (see setupOptimizations)");
 		}
 
 		Log.info('Production checklist (branch "$MAIN_BRANCH_NAME"):\n  ' + checklist.join("\n  "));
