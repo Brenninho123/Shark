@@ -9,7 +9,7 @@ import openfl.display.Loader;
 import openfl.events.Event;
 import openfl.events.IOErrorEvent;
 import openfl.utils.ByteArray;
-import shark.mobile.StorageUtil;
+import shark.Content;
 import shark.online.Network;
 import shark.online.NetworkResponse;
 import shark.online.Online;
@@ -56,6 +56,8 @@ class ImageCreator
 			return;
 
 		initialized = true;
+
+		Content.initialize();
 
 		var previousCallback:Bool->Void = LimeManager.onLowMemoryModeChanged;
 
@@ -189,7 +191,7 @@ class ImageCreator
 						cacheImage(buildCacheKey(request.prompt, request.width, request.height), bitmap);
 
 					if (autoSaveToStorage)
-						StorageUtil.saveImage(bitmap, generateFilename(request.prompt), function(_):Void {}, function(_):Void {}, request.prompt);
+						Content.saveImage(bitmap, generateFilename(request.prompt), request.prompt);
 
 					request.onComplete(bitmap);
 					finishRequest(request);
