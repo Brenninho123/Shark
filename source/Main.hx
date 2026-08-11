@@ -38,6 +38,11 @@ import shark.backend.Mods;
 import shark.mobile.utils.TouchUtil;
 import shark.modding.Module;
 import shark.modding.ModuleHandler;
+import shark.api.admob.AdMobClient;
+import shark.api.google.GoogleClient;
+import shark.api.newgrounds.NewClient;
+import shark.world.Country;
+import shark.Native;
 
 class Main extends Sprite
 {
@@ -133,11 +138,14 @@ class Main extends Sprite
 		#end
 
 		setupDiscord();
+		setupPlatforms();
 		setupDebugOverlay();
 
 		#if debug
 		addChild(new FPS(10, 10, 0xFFFFFF));
 		#end
+
+		fireReady();
 	}
 
 	function extractBundledMods():Void
@@ -269,6 +277,7 @@ class Main extends Sprite
 		applyConnectivitySection(parsed.connectivity);
 		applyAppSection(parsed.app);
 		applyDiscordSection(parsed.discord);
+		applyPlatformsSection(parsed.platforms);
 
 		isNetworkConfigLoaded = true;
 	}
@@ -450,6 +459,82 @@ class Main extends Sprite
 		#end
 	}
 
+	var newgroundsEnabled:Bool = false;
+	var newgroundsAppId:String = "";
+	var googlePlayGamesEnabled:Bool = false;
+	var admobEnabled:Bool = false;
+	var countryDetectionEnabled:Bool = false;
+
+	function applyPlatformsSection(section:Dynamic):Void
+	{
+		if (section == null)
+			return;
+
+		if (section.newgrounds != null)
+		{
+			if (section.newgrounds.enabled != null)
+				newgroundsEnabled = section.newgrounds.enabled;
+
+			if (section.newgrounds.appId != null)
+				newgroundsAppId = section.newgrounds.appId;
+		}
+
+		if (section.googlePlayGames != null && section.googlePlayGames.enabled != null)
+			googlePlayGamesEnabled = section.googlePlayGames.enabled;
+
+		if (section.admob != null && section.admob.enabled != null)
+			admobEnabled = section.admob.enabled;
+
+		if (section.countryDetection != null && section.countryDetection.enabled != null)
+			countryDetectionEnabled = section.countryDetection.enabled;
+	}
+
+	function setupPlatforms():Void
+	{
+		if (newgroundsEnabled && StringTools.trim(newgroundsAppId).length > 0)
+		{
+			try
+			{
+				NewClient.initialize(newgroundsAppId);
+			}
+			catch (e:Dynamic)
+			{
+				CrasherLog.logWarning('Newgrounds failed to initialize: ${Std.string(e)}', "platforms");
+			}
+		}
+
+		#if android
+		if (googlePlayGamesEnabled)
+		{
+			try
+			{
+				GoogleClient.initialize(false);
+			}
+			catch (e:Dynamic)
+			{
+				CrasherLog.logWarning('Google Play Games failed to initialize: ${Std.string(e)}', "platforms");
+			}
+		}
+		#end
+
+		#if (android || ios)
+		if (admobEnabled)
+		{
+			try
+			{
+				AdMobClient.initialize();
+			}
+			catch (e:Dynamic)
+			{
+				CrasherLog.logWarning('AdMob failed to initialize: ${Std.string(e)}', "platforms");
+			}
+		}
+		#end
+
+		if (countryDetectionEnabled)
+			Country.detect();
+	}
+
 	function onDiscordStateSwitch():Void
 	{
 		#if cpp
@@ -579,6 +664,115 @@ class Main extends Sprite
 		return instance != null ? instance.isDebugOverlayVisible() : false;
 	}
 
+	// -----------------------------------------------------------------
+	// Public Shark API - the app's own control/diagnostics surface,
+	// safe to call from other systems, screens, or mods.
+	// -----------------------------------------------------------------
+
+	public static var onReady:Array<Void->Void> = [];
+	public static var onPause:Array<Void->Void> = [];
+	public static var onResume:Array<Void->Void> = [];
+
+	static var readyFired:Bool = false;
+
+	public static function addReadyListener(callback:Void->Void):Void
+	{
+		if (readyFired)
+		{
+			callback();
+			return;
+		}
+
+		onReady.push(callback);
+	}
+
+	public static function addPauseListener(callback:Void->Void):Void
+	{
+		onPause.push(callback);
+	}
+
+	public static function addResumeListener(callback:Void->Void):Void
+	{
+		onResume.push(callback);
+	}
+
+	static function fireReady():Void
+	{
+		if (readyFired)
+			return;
+
+		readyFired = true;
+
+		for (callback in onReady)
+		{
+			try
+			{
+				callback();
+			}
+			catch (e:Dynamic)
+			{
+				CrasherLog.logWarning('onReady listener failed: ${Std.string(e)}', "lifecycle");
+			}
+		}
+	}
+
+	static function firePause():Void
+	{
+		for (callback in onPause)
+		{
+			try
+			{
+				callback();
+			}
+			catch (e:Dynamic) {}
+		}
+	}
+
+	static function fireResume():Void
+	{
+		for (callback in onResume)
+		{
+			try
+			{
+				callback();
+			}
+			catch (e:Dynamic) {}
+		}
+	}
+
+	public static function getDiagnostics():String
+	{
+		return Native.getFullReport();
+	}
+
+	public static function getAppSummary():String
+	{
+		var lines:Array<String> = [
+			'Language: $systemLanguage',
+			'Network trusted: $isNetworkConfigTrusted',
+			'Safe mode: $isSafeMode',
+			ChatEngine.getHistorySummary(),
+			CrasherLog.getCategorySummary()
+		];
+
+		return lines.join(" | ");
+	}
+
+	public static function isReady():Bool
+	{
+		return readyFired;
+	}
+
+	public static function restartChat():Void
+	{
+		Head.reset();
+	}
+
+	public static function forceGarbageCollect():Void
+	{
+		Native.collectGarbage(true);
+	}
+
 	function onStageResize(e:Event):Void
 	{
 		if (FlxG.game != null)
@@ -595,6 +789,8 @@ class Main extends Sprite
 
 		if (FlxG.sound != null)
 			FlxG.sound.resume();
+
+		fireResume();
 	}
 
 	function onDeactivate(e:Event):Void
@@ -606,6 +802,7 @@ class Main extends Sprite
 			FlxG.sound.pause();
 
 		flushSave();
+		firePause();
 	}
 
 	#if sys
