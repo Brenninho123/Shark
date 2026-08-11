@@ -62,6 +62,26 @@ jobs:
           haxelib run lime config JAVA_HOME "$JAVA_HOME"
           haxelib run lime config ANDROID_SETUP true
 
+      - name: Ensure config.json exists
+        run: |
+          mkdir -p assets/data
+          if [ ! -f assets/data/config.json ]; then
+            cat > assets/data/config.json << 'CONFIGEOF'
+          {
+            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
+            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
+            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
+            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
+            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
+            "security": { "maxRequestsPerWindow": 20 },
+            "connectivity": { "onlineCheckInterval": 20 },
+            "app": { "buildVersion": "0.1.0" },
+            "discord": { "enabled": false, "clientId": "" }
+          }
+          CONFIGEOF
+            echo "Created placeholder config.json for CI build (no real API keys)"
+          fi
+
       - name: Generate Android keystore
         run: |
           mkdir -p Certificates
