@@ -15,17 +15,32 @@ class Guard
 	public static var maxImagePayloadBytes:Int = 15 * 1024 * 1024;
 
 	public static var trustedHosts:Array<String> = [];
+	public static var allowPrivateHosts:Bool = false;
+	public static var maxRateLimitBuckets:Int = 500;
 
 	static var rateLimitBuckets:Map<String, Array<Float>> = new Map();
+	static var rateLimitBucketOrder:Array<String> = [];
 
 	static var suspiciousPatterns:Array<String> = [
 		"ignore previous instructions",
 		"ignore all previous instructions",
+		"ignore the above",
 		"disregard previous instructions",
+		"disregard all prior",
+		"forget previous instructions",
 		"you are now",
+		"pretend you are",
+		"act as if",
 		"system prompt",
 		"reveal your instructions",
-		"jailbreak"
+		"repeat your instructions",
+		"print your system prompt",
+		"what are your instructions",
+		"jailbreak",
+		"developer mode",
+		"do anything now",
+		"bypass your",
+		"override your"
 	];
 
 	static var allowedUrlSchemes:Array<String> = ["https", "http"];
@@ -68,12 +83,50 @@ class Guard
 		if (allowedUrlSchemes.indexOf(scheme) == -1)
 			return false;
 
+		var host:String = extractHost(url, schemeEnd);
+
+		if (host == null)
+			return false;
+
+		if (!allowPrivateHosts && isPrivateOrLocalHost(host))
+			return false;
+
 		if (trustedHosts.length == 0)
 			return true;
 
-		var host:String = extractHost(url, schemeEnd);
+		return trustedHosts.indexOf(host) != -1;
+	}
 
-		return host != null && trustedHosts.indexOf(host) != -1;
+	static function isPrivateOrLocalHost(host:String):Bool
+	{
+		var lower:String = host.toLowerCase();
+
+		if (lower == "localhost" || lower == "127.0.0.1" || lower == "::1" || lower == "0.0.0.0")
+			return true;
+
+		if (StringTools.endsWith(lower, ".local"))
+			return true;
+
+		if (StringTools.startsWith(lower, "192.168.") || StringTools.startsWith(lower, "10."))
+			return true;
+
+		if (StringTools.startsWith(lower, "169.254."))
+			return true;
+
+		if (StringTools.startsWith(lower, "172."))
+		{
+			var parts:Array<String> = lower.split(".");
+
+			if (parts.length >= 2)
+			{
+				var secondOctet:Null<Int> = Std.parseInt(parts[1]);
+
+				if (secondOctet != null && secondOctet >= 16 && secondOctet <= 31)
+					return true;
+			}
+		}
+
+		return false;
 	}
 
 	static function extractHost(url:String, schemeEnd:Int):String
@@ -209,12 +262,22 @@ class Guard
 	public static function resetAllRateLimits():Void
 	{
 		rateLimitBuckets = new Map();
+		rateLimitBucketOrder = [];
 	}
 
 	static function getBucket(bucket:String):Array<Float>
 	{
 		if (!rateLimitBuckets.exists(bucket))
+		{
+			if (rateLimitBucketOrder.length >= maxRateLimitBuckets)
+			{
+				var oldest:String = rateLimitBucketOrder.shift();
+				rateLimitBuckets.remove(oldest);
+			}
+
 			rateLimitBuckets.set(bucket, []);
+			rateLimitBucketOrder.push(bucket);
+		}
 
 		return rateLimitBuckets.get(bucket);
 	}
@@ -228,6 +291,12 @@ class Guard
 			return false;
 
 		if (filename.indexOf("/") != -1 || filename.indexOf("\\") != -1)
+			return false;
+
+		if (filename.indexOf("\x00") != -1)
+			return false;
+
+		if (filename.length > 1 && filename.charAt(1) == ":")
 			return false;
 
 		return true;
