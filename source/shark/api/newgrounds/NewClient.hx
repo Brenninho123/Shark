@@ -29,7 +29,7 @@ class NewClient
 		{
 			NG.create(appId, sessionId);
 
-			NG.core.onLogin.add(onLoginSuccess);
+			NG.onCoreReady.add(onLoginSuccess);
 
 			NG.core.requestLogin(function(outcome:io.newgrounds.LoginOutcome):Void {});
 		}
