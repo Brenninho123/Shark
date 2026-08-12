@@ -1,6 +1,9 @@
 package shark.api.newgrounds;
 
+#if html5
 import io.newgrounds.NG;
+#end
+
 import shark.ui.debug.CrasherLog;
 
 class NewClient
@@ -43,16 +46,19 @@ class NewClient
 		#end
 	}
 
+	#if html5
 	static function onLoginSuccess():Void
 	{
 		isConnected = true;
 	}
+	#end
 
 	public static function unlockMedal(medalId:Int):Void
 	{
 		if (!isSupported || !isConnected)
 			return;
 
+		#if html5
 		try
 		{
 			NG.core.calls.medal.unlock(medalId).addErrorHandler(function(error:Dynamic):Void
@@ -64,6 +70,7 @@ class NewClient
 		{
 			CrasherLog.logWarning('Newgrounds medal unlock threw: ${Std.string(e)}');
 		}
+		#end
 	}
 
 	public static function postScore(boardId:Int, score:Int):Void
@@ -71,6 +78,7 @@ class NewClient
 		if (!isSupported || !isConnected)
 			return;
 
+		#if html5
 		try
 		{
 			NG.core.calls.scoreBoard.postScore(boardId, score).addErrorHandler(function(error:Dynamic):Void
@@ -82,6 +90,7 @@ class NewClient
 		{
 			CrasherLog.logWarning('Newgrounds score post threw: ${Std.string(e)}');
 		}
+		#end
 	}
 
 	public static function checkSession():Void
@@ -89,11 +98,13 @@ class NewClient
 		if (!isSupported)
 			return;
 
+		#if html5
 		try
 		{
 			NG.core.calls.app.checkSession().send();
 		}
 		catch (e:Dynamic) {}
+		#end
 	}
 
 	public static function getStatusSummary():String
