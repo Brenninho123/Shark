@@ -31,10 +31,7 @@ class NewClient
 
 			NG.core.onLogin.add(onLoginSuccess);
 
-			NG.core.requestLogin(function():Void {}, function():Void
-			{
-				CrasherLog.logWarning("Newgrounds login/session request failed or was cancelled");
-			});
+			NG.core.requestLogin(function(outcome:io.newgrounds.LoginOutcome):Void {});
 		}
 		catch (e:Dynamic)
 		{
