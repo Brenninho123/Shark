@@ -35,6 +35,7 @@ class GoogleClient
 		if (!isSupported)
 			return;
 
+		#if android
 		try
 		{
 			GooglePlayGames.login();
@@ -44,6 +45,7 @@ class GoogleClient
 		{
 			CrasherLog.logWarning('Google Play Games login failed: ${Std.string(e)}', "google");
 		}
+		#end
 	}
 
 	public static function unlockAchievement(achievementId:String):Void
@@ -51,6 +53,7 @@ class GoogleClient
 		if (!isSupported || !isSignedIn)
 			return;
 
+		#if android
 		try
 		{
 			GooglePlayGames.unlockAchievement(achievementId);
@@ -59,6 +62,7 @@ class GoogleClient
 		{
 			CrasherLog.logWarning('Failed to unlock achievement $achievementId: ${Std.string(e)}', "google");
 		}
+		#end
 	}
 
 	public static function incrementAchievement(achievementId:String, steps:Int):Void
@@ -66,6 +70,7 @@ class GoogleClient
 		if (!isSupported || !isSignedIn)
 			return;
 
+		#if android
 		try
 		{
 			GooglePlayGames.incrementAchievement(achievementId, steps);
@@ -74,6 +79,7 @@ class GoogleClient
 		{
 			CrasherLog.logWarning('Failed to increment achievement $achievementId: ${Std.string(e)}', "google");
 		}
+		#end
 	}
 
 	public static function submitScore(leaderboardId:String, score:Int):Void
@@ -81,6 +87,7 @@ class GoogleClient
 		if (!isSupported || !isSignedIn)
 			return;
 
+		#if android
 		try
 		{
 			GooglePlayGames.submitScore(leaderboardId, score);
@@ -89,6 +96,7 @@ class GoogleClient
 		{
 			CrasherLog.logWarning('Failed to submit score to $leaderboardId: ${Std.string(e)}', "google");
 		}
+		#end
 	}
 
 	public static function showAchievements():Void
@@ -96,11 +104,13 @@ class GoogleClient
 		if (!isSupported || !isSignedIn)
 			return;
 
+		#if android
 		try
 		{
 			GooglePlayGames.showAchievements();
 		}
 		catch (e:Dynamic) {}
+		#end
 	}
 
 	public static function showLeaderboard(leaderboardId:String):Void
@@ -108,11 +118,13 @@ class GoogleClient
 		if (!isSupported || !isSignedIn)
 			return;
 
+		#if android
 		try
 		{
 			GooglePlayGames.showLeaderboard(leaderboardId);
 		}
 		catch (e:Dynamic) {}
+		#end
 	}
 
 	public static function getStatusSummary():String
