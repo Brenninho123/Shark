@@ -26,10 +26,12 @@ import shark.functions.ChatEngine;
 import shark.menus.options.OptionsState;
 import shark.online.Online;
 import shark.online.manager.Internet;
+import shark.mobile.ui.AndroidKeyboard;
 import shark.shaders.WaterShader;
 import lime.manager.LimeManager;
 
 import Main;
+import MainCpp;
 
 class MainMenuState extends FlxState
 {
@@ -52,6 +54,8 @@ class MainMenuState extends FlxState
 	var newChatButton:FlxButton;
 	var optionsButton:FlxButton;
 	var boostButton:FlxButton;
+	var inputFieldBaseY:Float;
+	var sendButtonBaseY:Float;
 	var muteIcon:FlxSpriteGroup;
 	var statusDot:FlxSprite;
 	var statusText:FlxText;
@@ -123,6 +127,9 @@ class MainMenuState extends FlxState
 		sendButton = createIconButton(historyPad + inputWidth + 10, FlxG.height - inputHeight - 20, inputHeight, inputHeight, COLOR_WAVE, onSendPressed);
 		addSendIcon(sendButton);
 
+		inputFieldBaseY = inputField.y;
+		sendButtonBaseY = sendButton.y;
+
 		var topBarSize:Int = Resolution4K.scaledInt(isMobile ? 44 : 32);
 
 		muteButton = createIconButton(20, 12, topBarSize, topBarSize, COLOR_MID, onMutePressed);
@@ -141,6 +148,8 @@ class MainMenuState extends FlxState
 		FlixelShark.addBoltIcon(this, boostButton, COLOR_FOAM);
 
 		Internet.addListener(onOnlineStatusChanged);
+		AndroidKeyboard.initialize();
+		AndroidKeyboard.onKeyboardVisibilityChanged = onSoftKeyboardVisibilityChanged;
 		onOnlineStatusChanged(Internet.isConnected);
 
 		Head.onThinkingChanged = onThinkingChanged;
@@ -155,6 +164,7 @@ class MainMenuState extends FlxState
 			Audio.playMusic("ocean_ambient");
 
 		createVersionTag();
+		createDevWatermark();
 		animateTitle();
 	}
 
@@ -263,6 +273,22 @@ class MainMenuState extends FlxState
 		var versionText = FlixelShark.makeText(0, FlxG.height - (isMobile ? 18 : 14), FlxG.width - 10, 'v${LimeManager.buildVersion}', 10, COLOR_ACCENT, RIGHT);
 		versionText.alpha = 0.5;
 		add(versionText);
+	}
+
+	function createDevWatermark():Void
+	{
+		#if SHARK_DEV_MODE
+		var label:String = 'Dev Build (Commit: ${MainCpp.BUILD_COMMIT})';
+
+		var watermark = FlixelShark.makeShadowText(0, 8, FlxG.width - 10, label, isMobile ? 14 : 11, 0xFFF87171, COLOR_ABYSS, RIGHT);
+		watermark.alpha = 0.8;
+		add(watermark);
+
+		FlxTween.tween(watermark, {alpha: 0.4}, 1.2, {
+			ease: FlxEase.sineInOut,
+			type: PINGPONG
+		});
+		#end
 	}
 
 	function animateTitle():Void
@@ -515,6 +541,19 @@ class MainMenuState extends FlxState
 
 		boostButton.color = active ? COLOR_ONLINE : COLOR_MID;
 		pulseButton(boostButton);
+	}
+
+	function onSoftKeyboardVisibilityChanged(visible:Bool):Void
+	{
+		if (!isMobile)
+			return;
+
+		var estimatedKeyboardHeight:Float = FlxG.height * 0.35;
+		var targetInputY:Float = visible ? inputFieldBaseY - estimatedKeyboardHeight : inputFieldBaseY;
+		var targetSendY:Float = visible ? sendButtonBaseY - estimatedKeyboardHeight : sendButtonBaseY;
+
+		FlxTween.tween(inputField, {y: targetInputY}, 0.2, {ease: FlxEase.quadOut});
+		FlxTween.tween(sendButton, {y: targetSendY}, 0.2, {ease: FlxEase.quadOut});
 	}
 
 	function onOnlineStatusChanged(online:Bool):Void
