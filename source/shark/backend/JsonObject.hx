@@ -1,5 +1,7 @@
 package shark.backend;
 
+import tjson.TJSON;
+
 class JsonObject
 {
 	var data:Dynamic;
@@ -16,7 +18,7 @@ class JsonObject
 
 		try
 		{
-			return new JsonObject(haxe.Json.parse(raw));
+			return new JsonObject(TJSON.parse(raw));
 		}
 		catch (e:Dynamic)
 		{
