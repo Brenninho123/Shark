@@ -303,7 +303,7 @@ class Paths
 
 		try
 		{
-			return haxe.Json.parse(raw);
+			return tjson.TJSON.parse(raw);
 		}
 		catch (e:Dynamic)
 		{
