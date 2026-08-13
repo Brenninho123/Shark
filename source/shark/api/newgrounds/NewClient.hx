@@ -31,7 +31,7 @@ class NewClient
 
 			NG.onCoreReady.add(onLoginSuccess);
 
-			NG.core.requestLogin(function(outcome:io.newgrounds.LoginOutcome):Void {});
+			NG.core.requestLogin(function(outcome:Dynamic):Void {});
 		}
 		catch (e:Dynamic)
 		{
