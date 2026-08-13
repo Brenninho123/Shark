@@ -170,12 +170,6 @@ class Project extends HXProject
 
 		haxelibs.push(new Haxelib("newgrounds"));
 
-		if (target == ANDROID)
-		{
-			haxelibs.push(new Haxelib("extension-googleplaygames"));
-			config.set("android.setenv.GOOGLE_PLAY_GAMES_ID", envOr("SHARK_GPG_ID", "0"));
-		}
-
 		if (target == ANDROID || target == IOS)
 		{
 			haxelibs.push(new Haxelib("extension-admob"));
