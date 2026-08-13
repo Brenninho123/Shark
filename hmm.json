@@ -138,6 +138,13 @@
 			"name": "tjson",
 			"type": "haxelib",
 			"version": "1.4.0"
+		},
+		{
+			"name": "modding-recourses",
+			"type": "git",
+			"dir": null,
+			"ref": null,
+			"url": "https://github.com/Brenninho123/modding-recourses.git"
 		}
 	]
 }
