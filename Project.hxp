@@ -170,6 +170,7 @@ class Project extends HXProject
 
 		haxelibs.push(new Haxelib("newgrounds"));
 		haxelibs.push(new Haxelib("tjson"));
+		haxelibs.push(new Haxelib("modding-recourses"));
 
 		if (target == ANDROID || target == IOS)
 		{
