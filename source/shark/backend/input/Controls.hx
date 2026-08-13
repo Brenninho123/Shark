@@ -23,6 +23,7 @@ class Controls
 
 	public static var onGamepadConnected:FlxGamepad->Void;
 	public static var onGamepadDisconnected:FlxGamepad->Void;
+	public static var autoHideVirtualPadWithGamepad:Bool = true;
 
 	public static var swipeAsDirection:Bool = true;
 	public static var swipeHoldSeconds:Float = 0.2;
@@ -80,14 +81,29 @@ class Controls
 
 	static function handleGamepadConnected(gamepadDevice:FlxGamepad):Void
 	{
+		if (autoHideVirtualPadWithGamepad)
+			setVirtualPadVisible(false);
+
 		if (onGamepadConnected != null)
 			onGamepadConnected(gamepadDevice);
 	}
 
 	static function handleGamepadDisconnected(gamepadDevice:FlxGamepad):Void
 	{
+		if (autoHideVirtualPadWithGamepad && !isGamepadConnected())
+			setVirtualPadVisible(true);
+
 		if (onGamepadDisconnected != null)
 			onGamepadDisconnected(gamepadDevice);
+	}
+
+	public static function setVirtualPadVisible(value:Bool):Void
+	{
+		if (virtualPad == null)
+			return;
+
+		virtualPad.visible = value;
+		virtualPad.active = value;
 	}
 
 	public static function isGamepadConnected():Bool
@@ -106,6 +122,10 @@ class Controls
 			return null;
 
 		virtualPad = new FlxVirtualPad(dpadMode, buttonMode);
+
+		if (autoHideVirtualPadWithGamepad && isGamepadConnected())
+			setVirtualPadVisible(false);
+
 		return virtualPad;
 	}
 
