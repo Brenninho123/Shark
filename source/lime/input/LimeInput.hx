@@ -4,6 +4,7 @@ import lime.app.Application;
 import lime.ui.KeyCode;
 import lime.ui.KeyModifier;
 import lime.ui.Window;
+import lime.ui.Gamepad;
 
 class LimeInput
 {
@@ -11,6 +12,7 @@ class LimeInput
 	public static var onRawKeyUp:KeyCode->KeyModifier->Void;
 	public static var onRawTextInput:String->Void;
 
+	static var resizeListeners:Array<Int->Int->Void> = [];
 	static var initialized:Bool = false;
 
 	public static var window(get, never):Window;
@@ -30,6 +32,7 @@ class LimeInput
 		window.onKeyDown.add(handleKeyDown);
 		window.onKeyUp.add(handleKeyUp);
 		window.onTextInput.add(handleTextInput);
+		window.onResize.add(handleResize);
 	}
 
 	static function handleKeyDown(keyCode:KeyCode, modifier:KeyModifier):Void
@@ -48,6 +51,29 @@ class LimeInput
 	{
 		if (onRawTextInput != null)
 			onRawTextInput(text);
+	}
+
+	static function handleResize(width:Int, height:Int):Void
+	{
+		for (listener in resizeListeners)
+		{
+			try
+			{
+				listener(width, height);
+			}
+			catch (e:Dynamic) {}
+		}
+	}
+
+	public static function addResizeListener(callback:Int->Int->Void):Void
+	{
+		if (resizeListeners.indexOf(callback) == -1)
+			resizeListeners.push(callback);
+	}
+
+	public static function removeResizeListener(callback:Int->Int->Void):Void
+	{
+		resizeListeners.remove(callback);
 	}
 
 	public static function showSoftKeyboard():Void
@@ -95,5 +121,30 @@ class LimeInput
 	public static function isFullscreen():Bool
 	{
 		return window != null && window.fullscreen;
+	}
+
+	public static function getConnectedGamepadCount():Int
+	{
+		var count:Int = 0;
+
+		for (id in Gamepad.devices.keys())
+			count++;
+
+		return count;
+	}
+
+	public static function hasConnectedGamepad():Bool
+	{
+		return getConnectedGamepadCount() > 0;
+	}
+
+	public static function getGamepadNames():Array<String>
+	{
+		var names:Array<String> = [];
+
+		for (gamepad in Gamepad.devices)
+			names.push(gamepad.name != null ? gamepad.name : "Unknown gamepad");
+
+		return names;
 	}
 }
