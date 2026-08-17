@@ -197,7 +197,6 @@ class Project extends HXProject
 		haxelibs.push(new Haxelib("newgrounds"));
 		activeFeatures.push("Newgrounds API");
 
-		haxelibs.push(new Haxelib("tjson"));
 
 		if (target == ANDROID || target == IOS)
 		{
