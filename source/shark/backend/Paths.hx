@@ -303,7 +303,7 @@ class Paths
 
 		try
 		{
-			return tjson.TJSON.parse(raw);
+			return haxe.Json.parse(JsonObject.stripJsonComments(raw));
 		}
 		catch (e:Dynamic)
 		{
