@@ -13,6 +13,7 @@ class Project extends HXProject
 	var isDevBranch:Bool;
 	var isMainBranch:Bool;
 	var gitBranch:String;
+	var isGitAvailable:Bool = true;
 
 	public function new()
 	{
@@ -67,6 +68,12 @@ class Project extends HXProject
 	{
 		var devTag:String = isDevBranch ? " [DEV BRANCH]" : "";
 		Log.info('Shark ${meta.version} (build ${meta.buildNumber}, commit ${haxedefs.get("SHARK_COMMIT")}, branch $gitBranch) -> $target, ${debug ? "debug" : "release"}$devTag');
+
+		if (!isGitAvailable)
+			Log.warn("git was not found or this is not a git repository - commit hash, branch, and tag/working-tree checks fell back to defaults.");
+
+		if (activeFeatures.length > 0)
+			Log.info('Active optional features for this build: ${activeFeatures.join(", ")}');
 	}
 
 	function setupMeta():Void
@@ -135,6 +142,8 @@ class Project extends HXProject
 		sources.push("source");
 	}
 
+	var activeFeatures:Array<String> = [];
+
 	function setupHaxelibs():Void
 	{
 		haxelibs.push(new Haxelib("lime"));
@@ -146,35 +155,55 @@ class Project extends HXProject
 		haxelibs.push(new Haxelib("SScript"));
 
 		if (debug)
+		{
 			haxelibs.push(new Haxelib("flixel-demos"));
+			activeFeatures.push("flixel-demos (debug reference)");
+		}
 
 		if (target != HTML5)
+		{
 			haxelibs.push(new Haxelib("hxdiscord_rpc"));
+			activeFeatures.push("Discord Rich Presence");
+		}
 
 		if (target == ANDROID)
+		{
 			haxelibs.push(new Haxelib("extension-androidtools"));
+			activeFeatures.push("Android native tools");
+		}
 
 		haxelibs.push(new Haxelib("polymod"));
+		activeFeatures.push("Polymod");
 
 		if (target == WINDOWS || target == MAC || target == LINUX || target == ANDROID || target == IOS)
+		{
 			haxelibs.push(new Haxelib("hxvlc"));
+			activeFeatures.push("Video playback (hxvlc)");
+		}
 
 		if (target == WINDOWS)
+		{
 			haxelibs.push(new Haxelib("hxWindowColorMode"));
+			activeFeatures.push("Windows dark-mode window theming");
+		}
 
 		haxelibs.push(new Haxelib("hxmath"));
 		haxedefs.set("HXMATH_USE_OPENFL_STRUCTURES", "");
 
 		haxelibs.push(new Haxelib("haxeui-core"));
 		haxelibs.push(new Haxelib("haxeui-flixel"));
+		activeFeatures.push("HaxeUI");
 
 		haxelibs.push(new Haxelib("newgrounds"));
+		activeFeatures.push("Newgrounds API");
+
 		haxelibs.push(new Haxelib("tjson"));
 		haxelibs.push(new Haxelib("modding-recourses"));
 
 		if (target == ANDROID || target == IOS)
 		{
 			haxelibs.push(new Haxelib("extension-admob"));
+			activeFeatures.push("AdMob");
 
 			if (target == ANDROID)
 				config.set("android.setenv.ADMOB_APPID", envOr("SHARK_ADMOB_APPID_ANDROID", "ca-app-pub-3940256099942544~3347511713"));
@@ -184,7 +213,10 @@ class Project extends HXProject
 		}
 
 		if (target == LINUX)
+		{
 			haxelibs.push(new Haxelib("hxgamemode"));
+			activeFeatures.push("Linux GameMode");
+		}
 
 		haxelibs.push(new Haxelib("flxanimate"));
 
@@ -193,6 +225,7 @@ class Project extends HXProject
 			haxelibs.push(new Haxelib("munit"));
 			haxelibs.push(new Haxelib("mconsole"));
 			haxelibs.push(new Haxelib("mcover"));
+			activeFeatures.push("Unit testing (munit/mcover, debug only)");
 		}
 	}
 
@@ -265,12 +298,20 @@ class Project extends HXProject
 		{
 			var process = new sys.io.Process("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
 			var output:String = StringTools.trim(process.stdout.readAll().toString());
+			var exitCode:Int = process.exitCode();
 			process.close();
+
+			if (exitCode != 0)
+			{
+				isGitAvailable = false;
+				return "unknown";
+			}
 
 			return output.length > 0 ? output : "unknown";
 		}
 		catch (e:Dynamic)
 		{
+			isGitAvailable = false;
 			return "unknown";
 		}
 	}
