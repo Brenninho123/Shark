@@ -181,12 +181,6 @@ class Project extends HXProject
 			activeFeatures.push("Video playback (hxvlc)");
 		}
 
-		if (target == WINDOWS)
-		{
-			haxelibs.push(new Haxelib("hxWindowColorMode"));
-			activeFeatures.push("Windows dark-mode window theming");
-		}
-
 		haxelibs.push(new Haxelib("hxmath"));
 		haxedefs.set("HXMATH_USE_OPENFL_STRUCTURES", "");
 
