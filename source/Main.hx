@@ -278,8 +278,28 @@ class Main extends Sprite
 		applyAppSection(parsed.app);
 		applyDiscordSection(parsed.discord);
 		applyPlatformsSection(parsed.platforms);
+		validateConfigSchema(parsed);
 
 		isNetworkConfigLoaded = true;
+	}
+
+	static var knownConfigSections:Array<String> = [
+		"network", "chat", "api", "image", "audio", "security", "connectivity", "app", "discord", "platforms"
+	];
+
+	function validateConfigSchema(parsed:Dynamic):Void
+	{
+		var unknownSections:Array<String> = [];
+
+		for (field in Reflect.fields(parsed))
+			if (knownConfigSections.indexOf(field) == -1)
+				unknownSections.push(field);
+
+		if (unknownSections.length > 0)
+			CrasherLog.logWarning('config.json has unrecognized section(s): ${unknownSections.join(", ")} - check for typos', "config");
+
+		if (parsed.network == null)
+			CrasherLog.logWarning("config.json is missing the \"network\" section entirely - chat/image won't work", "config");
 	}
 
 	function applyNetworkSection(section:Dynamic):Void
