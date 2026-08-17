@@ -1,7 +1,5 @@
 package shark.backend;
 
-import tjson.TJSON;
-
 class JsonObject
 {
 	var data:Dynamic;
@@ -18,12 +16,107 @@ class JsonObject
 
 		try
 		{
-			return new JsonObject(TJSON.parse(raw));
+			return new JsonObject(haxe.Json.parse(stripJsonComments(raw)));
 		}
 		catch (e:Dynamic)
 		{
 			return new JsonObject();
 		}
+	}
+
+	public static function stripJsonComments(input:String):String
+	{
+		var result:StringBuf = new StringBuf();
+		var length:Int = input.length;
+		var i:Int = 0;
+		var inString:Bool = false;
+
+		while (i < length)
+		{
+			var c:String = input.charAt(i);
+
+			if (inString)
+			{
+				result.add(c);
+
+				if (c == "\\" && i + 1 < length)
+				{
+					result.add(input.charAt(i + 1));
+					i += 2;
+					continue;
+				}
+
+				if (c == '"')
+					inString = false;
+
+				i++;
+				continue;
+			}
+
+			if (c == '"')
+			{
+				inString = true;
+				result.add(c);
+				i++;
+				continue;
+			}
+
+			if (c == "/" && i + 1 < length && input.charAt(i + 1) == "/")
+			{
+				while (i < length && input.charAt(i) != "\n")
+					i++;
+
+				continue;
+			}
+
+			if (c == "/" && i + 1 < length && input.charAt(i + 1) == "*")
+			{
+				i += 2;
+
+				while (i + 1 < length && !(input.charAt(i) == "*" && input.charAt(i + 1) == "/"))
+					i++;
+
+				i += 2;
+				continue;
+			}
+
+			result.add(c);
+			i++;
+		}
+
+		return removeTrailingCommas(result.toString());
+	}
+
+	static function removeTrailingCommas(input:String):String
+	{
+		var result:StringBuf = new StringBuf();
+		var length:Int = input.length;
+		var i:Int = 0;
+
+		while (i < length)
+		{
+			var c:String = input.charAt(i);
+
+			if (c == ",")
+			{
+				var lookahead:Int = i + 1;
+
+				while (lookahead < length && (input.charAt(lookahead) == " " || input.charAt(lookahead) == "\t" || input.charAt(lookahead) == "\n"
+					|| input.charAt(lookahead) == "\r"))
+					lookahead++;
+
+				if (lookahead < length && (input.charAt(lookahead) == "}" || input.charAt(lookahead) == "]"))
+				{
+					i++;
+					continue;
+				}
+			}
+
+			result.add(c);
+			i++;
+		}
+
+		return result.toString();
 	}
 
 	public static function fromDynamic(source:Dynamic):JsonObject
