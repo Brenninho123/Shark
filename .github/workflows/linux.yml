@@ -42,13 +42,20 @@ jobs:
       - name: Cache haxelib dependencies
         uses: actions/cache@v4
         with:
-          path: ~/haxelib
+          path: .haxelib
           key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
           restore-keys: |
             ${{ runner.os }}-haxelib-
 
       - name: Install dependencies
         run: haxelib run hmm install
+
+      - name: List installed haxelibs (diagnostic)
+        run: |
+          echo "--- haxelib list ---"
+          haxelib list
+          echo "--- checking tjson specifically ---"
+          haxelib path tjson || echo "tjson NOT installed"
 
       - name: Setup Lime
         run: haxelib run lime setup -y
