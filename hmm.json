@@ -133,11 +133,6 @@
 			"name": "extension-admob",
 			"type": "haxelib",
 			"version": "3.0.1"
-		},
-		{
-			"name": "tjson",
-			"type": "haxelib",
-			"version": "1.4.0"
 		}
 	]
 }
