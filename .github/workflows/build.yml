@@ -1,0 +1,602 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which platform to build (leave as 'all' to build everything)"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - windows
+          - android
+          - linux
+          - mac
+          - html5
+          - ios
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.target == 'all' || github.event.inputs.target == 'windows'
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.7
+
+      - name: Install hmm
+        run: haxelib install hmm
+
+      - name: Cache haxelib dependencies
+        uses: actions/cache@v4
+        with:
+          path: .haxelib
+          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          restore-keys: |
+            ${{ runner.os }}-haxelib-
+
+      - name: Install dependencies
+        run: haxelib run hmm install
+
+      - name: List installed haxelibs (diagnostic)
+        run: haxelib list
+
+      - name: Setup Lime
+        run: haxelib run lime setup -y
+
+      - name: Ensure config.json exists
+        shell: bash
+        run: |
+          mkdir -p assets/data
+          if [ ! -f assets/data/config.json ]; then
+            cat > assets/data/config.json << 'CONFIGEOF'
+          {
+            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
+            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
+            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
+            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
+            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
+            "security": { "maxRequestsPerWindow": 20 },
+            "connectivity": { "onlineCheckInterval": 20 },
+            "app": { "buildVersion": "0.1.0" },
+            "discord": { "enabled": false, "clientId": "" }
+          }
+          CONFIGEOF
+            echo "Created placeholder config.json for CI build"
+          fi
+
+      - name: Build Windows
+        shell: bash
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          attempt=1
+          max_attempts=2
+
+          until haxelib run lime build windows -final; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Build failed after $max_attempts attempts"
+              exit 1
+            fi
+
+            echo "Build attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+          done
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-Windows
+          path: export/windows/bin
+          retention-days: 7
+
+  build-android:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.target == 'all' || github.event.inputs.target == 'android'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager --install "ndk;21.4.7075529"
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.7
+
+      - name: Install hmm
+        run: haxelib install hmm
+
+      - name: Cache haxelib dependencies
+        uses: actions/cache@v4
+        with:
+          path: .haxelib
+          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          restore-keys: |
+            ${{ runner.os }}-haxelib-
+
+      - name: Install dependencies
+        run: haxelib run hmm install
+
+      - name: List installed haxelibs (diagnostic)
+        run: haxelib list
+
+      - name: Setup Lime
+        run: |
+          haxelib run lime config ANDROID_SDK "$ANDROID_HOME"
+          haxelib run lime config ANDROID_NDK_ROOT "$ANDROID_HOME/ndk/21.4.7075529"
+          haxelib run lime config JAVA_HOME "$JAVA_HOME"
+          haxelib run lime setup -y android
+
+      - name: Ensure config.json exists
+        run: |
+          mkdir -p assets/data
+          if [ ! -f assets/data/config.json ]; then
+            cat > assets/data/config.json << 'CONFIGEOF'
+          {
+            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
+            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
+            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
+            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
+            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
+            "security": { "maxRequestsPerWindow": 20 },
+            "connectivity": { "onlineCheckInterval": 20 },
+            "app": { "buildVersion": "0.1.0" },
+            "discord": { "enabled": false, "clientId": "" }
+          }
+          CONFIGEOF
+            echo "Created placeholder config.json for CI build"
+          fi
+
+      - name: Generate Android keystore
+        run: |
+          mkdir -p Certificates
+          keytool -genkeypair -v \
+            -keystore Certificates/android.keystore \
+            -alias android \
+            -storepass android \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Shark, OU=Brenninho, O=Brenninho, L=Unknown, S=Unknown, C=BR"
+
+      - name: Build Android
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          attempt=1
+          max_attempts=2
+
+          until haxelib run lime build android -final; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Build failed after $max_attempts attempts"
+              exit 1
+            fi
+
+            echo "Build attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+          done
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-Android
+          path: export/android/bin/app/build/outputs/apk
+          retention-days: 7
+
+  build-linux:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.target == 'all' || github.event.inputs.target == 'linux'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            g++ \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libasound2-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libvlc-dev \
+            libvlccore-dev \
+            vlc
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.7
+
+      - name: Install hmm
+        run: haxelib install hmm
+
+      - name: Cache haxelib dependencies
+        uses: actions/cache@v4
+        with:
+          path: .haxelib
+          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          restore-keys: |
+            ${{ runner.os }}-haxelib-
+
+      - name: Install dependencies
+        run: haxelib run hmm install
+
+      - name: List installed haxelibs (diagnostic)
+        run: haxelib list
+
+      - name: Setup Lime
+        run: haxelib run lime setup -y
+
+      - name: Ensure config.json exists
+        run: |
+          mkdir -p assets/data
+          if [ ! -f assets/data/config.json ]; then
+            cat > assets/data/config.json << 'CONFIGEOF'
+          {
+            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
+            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
+            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
+            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
+            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
+            "security": { "maxRequestsPerWindow": 20 },
+            "connectivity": { "onlineCheckInterval": 20 },
+            "app": { "buildVersion": "0.1.0" },
+            "discord": { "enabled": false, "clientId": "" }
+          }
+          CONFIGEOF
+            echo "Created placeholder config.json for CI build"
+          fi
+
+      - name: Build Linux
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          attempt=1
+          max_attempts=2
+
+          until haxelib run lime build linux -final; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Build failed after $max_attempts attempts"
+              exit 1
+            fi
+
+            echo "Build attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+          done
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-Linux
+          path: export/linux/bin
+          retention-days: 7
+
+  build-mac:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.target == 'all' || github.event.inputs.target == 'mac'
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_ENV_HINTS: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.7
+        timeout-minutes: 10
+
+      - name: Install hmm
+        run: haxelib install hmm
+
+      - name: Cache haxelib dependencies
+        uses: actions/cache@v4
+        with:
+          path: .haxelib
+          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          restore-keys: |
+            ${{ runner.os }}-haxelib-
+
+      - name: Install dependencies
+        run: haxelib run hmm install
+
+      - name: List installed haxelibs (diagnostic)
+        run: haxelib list
+
+      - name: Setup Lime
+        run: haxelib run lime setup -y
+
+      - name: Ensure config.json exists
+        run: |
+          mkdir -p assets/data
+          if [ ! -f assets/data/config.json ]; then
+            cat > assets/data/config.json << 'CONFIGEOF'
+          {
+            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
+            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
+            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
+            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
+            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
+            "security": { "maxRequestsPerWindow": 20 },
+            "connectivity": { "onlineCheckInterval": 20 },
+            "app": { "buildVersion": "0.1.0" },
+            "discord": { "enabled": false, "clientId": "" }
+          }
+          CONFIGEOF
+            echo "Created placeholder config.json for CI build"
+          fi
+
+      - name: Build macOS
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          attempt=1
+          max_attempts=2
+
+          until haxelib run lime build mac -final; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Build failed after $max_attempts attempts"
+              exit 1
+            fi
+
+            echo "Build attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+          done
+
+      - name: List build output for debugging
+        if: always()
+        run: |
+          echo "--- top-level repo contents ---"
+          ls -la
+          echo "--- export directory (if any) ---"
+          find export -maxdepth 4 2>/dev/null || echo "no export directory found"
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-macOS
+          path: export
+          retention-days: 7
+          if-no-files-found: warn
+
+  build-html5:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.target == 'all' || github.event.inputs.target == 'html5'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.7
+
+      - name: Install hmm
+        run: haxelib install hmm
+
+      - name: Cache haxelib dependencies
+        uses: actions/cache@v4
+        with:
+          path: .haxelib
+          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          restore-keys: |
+            ${{ runner.os }}-haxelib-
+
+      - name: Install dependencies
+        run: haxelib run hmm install
+
+      - name: List installed haxelibs (diagnostic)
+        run: haxelib list
+
+      - name: Setup Lime
+        run: haxelib run lime setup -y
+
+      - name: Ensure config.json exists
+        run: |
+          mkdir -p assets/data
+          if [ ! -f assets/data/config.json ]; then
+            cat > assets/data/config.json << 'CONFIGEOF'
+          {
+            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
+            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
+            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
+            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
+            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
+            "security": { "maxRequestsPerWindow": 20 },
+            "connectivity": { "onlineCheckInterval": 20 },
+            "app": { "buildVersion": "0.1.0" },
+            "discord": { "enabled": false, "clientId": "" }
+          }
+          CONFIGEOF
+            echo "Created placeholder config.json for CI build"
+          fi
+
+      - name: Build HTML5
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          attempt=1
+          max_attempts=2
+
+          until haxelib run lime build html5 -final; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Build failed after $max_attempts attempts"
+              exit 1
+            fi
+
+            echo "Build attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+          done
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-HTML5
+          path: export/html5/bin
+          retention-days: 7
+
+  build-ios:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.target == 'all' || github.event.inputs.target == 'ios'
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_ENV_HINTS: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.7
+        timeout-minutes: 10
+
+      - name: Install hmm
+        run: haxelib install hmm
+
+      - name: Cache haxelib dependencies
+        uses: actions/cache@v4
+        with:
+          path: .haxelib
+          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          restore-keys: |
+            ${{ runner.os }}-haxelib-
+
+      - name: Install dependencies
+        run: haxelib run hmm install
+
+      - name: List installed haxelibs (diagnostic)
+        run: haxelib list
+
+      - name: Setup Lime
+        run: haxelib run lime setup -y
+
+      - name: Ensure config.json exists
+        run: |
+          mkdir -p assets/data
+          if [ ! -f assets/data/config.json ]; then
+            cat > assets/data/config.json << 'CONFIGEOF'
+          {
+            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
+            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
+            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
+            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
+            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
+            "security": { "maxRequestsPerWindow": 20 },
+            "connectivity": { "onlineCheckInterval": 20 },
+            "app": { "buildVersion": "0.1.0" },
+            "discord": { "enabled": false, "clientId": "" }
+          }
+          CONFIGEOF
+            echo "Created placeholder config.json for CI build"
+          fi
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.2.app || sudo xcode-select -s /Applications/Xcode.app
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+
+      - name: Build iOS (simulator)
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          attempt=1
+          max_attempts=2
+
+          until haxelib run lime build ios -simulator -final; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Build failed after $max_attempts attempts"
+              exit 1
+            fi
+
+            echo "Build attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+          done
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-iOS
+          path: export/ios/build/Release-iphonesimulator
+          retention-days: 7
+
+  build-summary:
+    if: always()
+    needs:
+      - build-windows
+      - build-android
+      - build-linux
+      - build-mac
+      - build-html5
+      - build-ios
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "## Shark build summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Platform | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Windows | ${{ needs.build-windows.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Android | ${{ needs.build-android.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Linux | ${{ needs.build-linux.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| macOS | ${{ needs.build-mac.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| HTML5 | ${{ needs.build-html5.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| iOS (simulator) | ${{ needs.build-ios.result }} |" >> "$GITHUB_STEP_SUMMARY"
