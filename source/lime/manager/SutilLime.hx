@@ -141,7 +141,7 @@ class SutilLime
 		lines.push('Boot checkpoints: ${MainCpp.getCheckpointReport()}');
 
 		#if cpp
-		lines.push('Memory: ${Math.round(CPP.getMemoryUsageMB())}MB / ${Math.round(CPP.getMemoryReservedMB())}MB');
+		lines.push('Memory: ${Math.round(CPP.getMemoryUsageMB())}MB used / ${Math.round(CPP.getMemoryReservedMB())}MB reserved / ${Math.round(CPP.getTotalSystemMemoryMB())}MB system total');
 		lines.push('CPU cores: ${CPP.getCpuCoreCount()}');
 		#end
 
