@@ -5,9 +5,19 @@ on:
     branches:
       - main
       - dev
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - "arts/**"
+    tags:
+      - "v*"
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - "arts/**"
   workflow_dispatch:
     inputs:
       target:
@@ -21,7 +31,6 @@ on:
           - android
           - linux
           - mac
-          - html5
           - ios
 
 concurrency:
@@ -407,85 +416,6 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  build-html5:
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.target == 'all' || github.event.inputs.target == 'html5'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2
-        with:
-          haxe-version: 4.3.7
-
-      - name: Install hmm
-        run: haxelib install hmm
-
-      - name: Cache haxelib dependencies
-        uses: actions/cache@v4
-        with:
-          path: .haxelib
-          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
-          restore-keys: |
-            ${{ runner.os }}-haxelib-
-
-      - name: Install dependencies
-        run: haxelib run hmm install
-
-      - name: List installed haxelibs (diagnostic)
-        run: haxelib list
-
-      - name: Setup Lime
-        run: haxelib run lime setup -y
-
-      - name: Ensure config.json exists
-        run: |
-          mkdir -p assets/data
-          if [ ! -f assets/data/config.json ]; then
-            cat > assets/data/config.json << 'CONFIGEOF'
-          {
-            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
-            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
-            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
-            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
-            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
-            "security": { "maxRequestsPerWindow": 20 },
-            "connectivity": { "onlineCheckInterval": 20 },
-            "app": { "buildVersion": "0.1.0" },
-            "discord": { "enabled": false, "clientId": "" }
-          }
-          CONFIGEOF
-            echo "Created placeholder config.json for CI build"
-          fi
-
-      - name: Build HTML5
-        timeout-minutes: 15
-        run: |
-          set -o pipefail
-          attempt=1
-          max_attempts=2
-
-          until haxelib run lime build html5 -final; do
-            if [ "$attempt" -ge "$max_attempts" ]; then
-              echo "Build failed after $max_attempts attempts"
-              exit 1
-            fi
-
-            echo "Build attempt $attempt failed, retrying..."
-            attempt=$((attempt + 1))
-          done
-
-      - name: Upload artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Shark-HTML5
-          path: export/html5/bin
-          retention-days: 7
-
   build-ios:
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.target == 'all' || github.event.inputs.target == 'ios'
     runs-on: macos-15-intel
@@ -583,7 +513,6 @@ jobs:
       - build-android
       - build-linux
       - build-mac
-      - build-html5
       - build-ios
     runs-on: ubuntu-latest
 
@@ -598,5 +527,40 @@ jobs:
           echo "| Android | ${{ needs.build-android.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Linux | ${{ needs.build-linux.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| macOS | ${{ needs.build-mac.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| HTML5 | ${{ needs.build-html5.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| iOS (simulator) | ${{ needs.build-ios.result }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  create-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-windows
+      - build-android
+      - build-linux
+      - build-mac
+      - build-ios
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Package artifacts as zips
+        run: |
+          cd release-artifacts
+          for dir in */; do
+            name="${dir%/}"
+            (cd "$name" && zip -r "../${name}.zip" .)
+          done
+          ls -la
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Shark ${{ github.ref_name }}
+          generate_release_notes: true
+          files: release-artifacts/*.zip
+          fail_on_unmatched_files: false
