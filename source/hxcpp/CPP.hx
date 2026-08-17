@@ -12,6 +12,7 @@ import sys.thread.Mutex;
 #include <random>
 #ifdef _WIN32
 #include <process.h>
+#include <windows.h>
 #else
 #include <unistd.h>
 #endif
@@ -387,6 +388,64 @@ class CPP
 		return untyped __cpp__("({0} * {3} - {1} * {2})", x1, y1, x2, y2);
 		#else
 		return x1 * y2 - y1 * x2;
+		#end
+	}
+
+	public static function fastClamp(value:Float, min:Float, max:Float):Float
+	{
+		#if cpp
+		return untyped __cpp__("({0} < {1} ? {1} : ({0} > {2} ? {2} : {0}))", value, min, max);
+		#else
+		if (value < min)
+			return min;
+
+		if (value > max)
+			return max;
+
+		return value;
+		#end
+	}
+
+	public static function smoothstep(edge0:Float, edge1:Float, x:Float):Float
+	{
+		#if cpp
+		return untyped __cpp__("
+			[](double e0, double e1, double v) {
+				double t = (e1 - e0 <= 0.0) ? 0.0 : (v - e0) / (e1 - e0);
+				t = t < 0.0 ? 0.0 : (t > 1.0 ? 1.0 : t);
+				return t * t * (3.0 - 2.0 * t);
+			}({0}, {1}, {2})
+		", edge0, edge1, x);
+		#else
+		var range:Float = edge1 - edge0;
+		var t:Float = range <= 0 ? 0 : (x - edge0) / range;
+
+		if (t < 0)
+			t = 0;
+		else if (t > 1)
+			t = 1;
+
+		return t * t * (3 - 2 * t);
+		#end
+	}
+
+	public static function getTotalSystemMemoryMB():Float
+	{
+		#if cpp
+		return untyped __cpp__("
+			#ifdef _WIN32
+				[]() -> double {
+					MEMORYSTATUSEX status;
+					status.dwLength = sizeof(status);
+					GlobalMemoryStatusEx(&status);
+					return (double)status.ullTotalPhys / 1024.0 / 1024.0;
+				}()
+			#else
+				(double)(sysconf(_SC_PHYS_PAGES) * sysconf(_SC_PAGE_SIZE)) / 1024.0 / 1024.0
+			#endif
+		");
+		#else
+		return 0;
 		#end
 	}
 }
