@@ -195,6 +195,44 @@ if /I "%~1"=="astc" (
 	exit /b %errorlevel%
 )
 
+if /I "%~1"=="watch" (
+	if "%~2"=="" (
+		echo Usage: lime.bat watch [windows^|android^|html5^|linux^|mac]
+		exit /b 1
+	)
+
+	where powershell >nul 2>&1
+	if errorlevel 1 (
+		echo [ERROR] "powershell" was not found - watch mode needs it to detect file changes.
+		exit /b 1
+	)
+
+	set WATCH_TARGET=%~2
+	set LAST_STAMP=
+
+	echo Watching source\ and assets\ for changes ^(target: !WATCH_TARGET!^). Press Ctrl+C to stop.
+	echo Building once now...
+	haxelib run lime build !WATCH_TARGET!
+	echo.
+	echo Watching for changes...
+
+	:watchloop
+	for /f %%s in ('powershell -NoProfile -Command "try { (Get-ChildItem -Path source,assets,project.hxp -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property LastWriteTime -Maximum).Maximum.Ticks } catch { 0 }"') do set CURRENT_STAMP=%%s
+
+	if not "!CURRENT_STAMP!"=="!LAST_STAMP!" (
+		if defined LAST_STAMP (
+			echo.
+			echo [%date% %time%] Change detected - rebuilding !WATCH_TARGET!...
+			haxelib run lime build !WATCH_TARGET!
+			echo Watching for changes...
+		)
+		set LAST_STAMP=!CURRENT_STAMP!
+	)
+
+	timeout /t 2 /nobreak >nul
+	goto watchloop
+)
+
 if /I "%~1"=="version" (
 	if "%~2"=="" (
 		if exist VERSION (
@@ -222,6 +260,7 @@ echo   lime.bat dev                 Switch to the dev branch and run project boo
 echo   lime.bat status              Show branch, version, build number, config status
 echo   lime.bat check               Run pre-flight validation without building
 echo   lime.bat build ^<target^>      Build for a target using project.hxp
+echo   lime.bat watch ^<target^>      Build, then auto-rebuild whenever source/assets change
 echo   lime.bat release ^<target^>    Build using Build.hxp ^(stricter CI-style profile^)
 echo   lime.bat publish ^<target^>    Same as release, but only allowed on the main branch
 echo   lime.bat test ^<target^>       Build and run for a target
