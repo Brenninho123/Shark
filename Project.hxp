@@ -240,15 +240,42 @@ class Project extends HXProject
 		if (target == HTML5)
 			return;
 
-		var hasMods:Bool = sys.FileSystem.exists("mods") && sys.FileSystem.isDirectory("mods") && sys.FileSystem.readDirectory("mods").length > 0;
-
-		if (!hasMods)
+		if (!sys.FileSystem.exists("mods") || !sys.FileSystem.isDirectory("mods"))
 			return;
+
+		var entries:Array<String> = sys.FileSystem.readDirectory("mods");
+
+		if (entries.length == 0)
+			return;
+
+		var scriptModCount:Int = 0;
+		var folderModCount:Int = 0;
+
+		for (entry in entries)
+		{
+			var fullPath:String = 'mods/$entry';
+
+			if (sys.FileSystem.isDirectory(fullPath))
+				folderModCount++;
+			else if (StringTools.endsWith(entry, ".hxs"))
+				scriptModCount++;
+		}
 
 		includeAssets("mods", "mods");
 		haxedefs.set("SHARK_HAS_BUNDLED_MODS", "");
 
-		Log.info('Bundled mods folder detected (mods/) - packaging with the app.');
+		setupPolymodDefines();
+
+		activeFeatures.push('Bundled mods ($scriptModCount script, $folderModCount folder)');
+		Log.info('Bundled mods folder detected: $scriptModCount .hxs script mod(s), $folderModCount Polymod folder mod(s) - packaging with the app.');
+	}
+
+	function setupPolymodDefines():Void
+	{
+		haxedefs.set("POLYMOD_SCRIPT_EXT", "hxs");
+
+		if (debug)
+			haxedefs.set("POLYMOD_DEBUG", "");
 	}
 
 	function setupIcon():Void
@@ -338,6 +365,7 @@ class Project extends HXProject
 		checkProductionItem(checklist, failures, "no merge conflict markers in source/", !hasMergeConflictMarkers(), true);
 		checkProductionItem(checklist, failures, 'version "${meta.version}" has a matching git tag', hasMatchingGitTag(meta.version), false);
 		checkProductionItem(checklist, failures, 'CHANGELOG.md mentions "${meta.version}"', changelogMentionsVersion(meta.version), false);
+		checkProductionItem(checklist, failures, "no broken mod folders (missing _polymod_meta.json)", !hasIncompleteModFolders(), false);
 
 		if (target == ANDROID && !debug)
 		{
@@ -443,6 +471,25 @@ class Project extends HXProject
 		{
 			return true;
 		}
+	}
+
+	function hasIncompleteModFolders():Bool
+	{
+		if (!sys.FileSystem.exists("mods") || !sys.FileSystem.isDirectory("mods"))
+			return false;
+
+		for (entry in sys.FileSystem.readDirectory("mods"))
+		{
+			var fullPath:String = 'mods/$entry';
+
+			if (!sys.FileSystem.isDirectory(fullPath))
+				continue;
+
+			if (!sys.FileSystem.exists('$fullPath/_polymod_meta.json'))
+				return true;
+		}
+
+		return false;
 	}
 
 	function checkProductionItem(checklist:Array<String>, failures:Array<String>, label:String, passed:Bool, isBlocking:Bool):Void
