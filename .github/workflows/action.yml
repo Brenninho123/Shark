@@ -1,0 +1,45 @@
+name: Setup Shark toolchain
+description: Installs Haxe, hmm dependencies, and (optionally) runs a generic Lime setup
+
+inputs:
+  haxe-version:
+    required: true
+  lime-setup-target:
+    required: false
+    default: ""
+  skip-lime-setup:
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Haxe
+      uses: krdlab/setup-haxe@v2
+      with:
+        haxe-version: ${{ inputs.haxe-version }}
+
+    - name: Install hmm
+      shell: bash
+      run: haxelib install hmm
+
+    - name: Cache haxelib dependencies
+      uses: actions/cache@v4
+      with:
+        path: .haxelib
+        key: ${{ runner.os }}-haxelib-${{ inputs.haxe-version }}-${{ hashFiles('hmm.json') }}
+        restore-keys: |
+          ${{ runner.os }}-haxelib-${{ inputs.haxe-version }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: haxelib run hmm install
+
+    - name: List installed haxelibs
+      shell: bash
+      run: haxelib list
+
+    - name: Setup Lime
+      if: inputs.skip-lime-setup != 'true'
+      shell: bash
+      run: haxelib run lime setup -y ${{ inputs.lime-setup-target }}
