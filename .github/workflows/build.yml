@@ -32,10 +32,28 @@ on:
           - linux
           - mac
           - ios
+      environment:
+        description: "Override SHARK_ENV (leave as 'auto' to infer from the branch/tag)"
+        required: true
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - dev
+          - staging
+          - production
 
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+permissions:
+  contents: read
+
+env:
+  HAXE_VERSION: "4.3.7"
+  ANDROID_NDK_VERSION: "21.4.7075529"
+  HXCPP_COMPILE_CACHE: ${{ github.workspace }}/.hxcpp_cache
 
 jobs:
   build-windows:
@@ -47,69 +65,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2
+      - name: Resolve environment
+        uses: ./.github/actions/resolve-environment
         with:
-          haxe-version: 4.3.7
+          environment-input: ${{ github.event.inputs.environment }}
 
-      - name: Install hmm
-        run: haxelib install hmm
+      - name: Set version from tag
+        uses: ./.github/actions/set-version
 
-      - name: Cache haxelib dependencies
+      - name: Cache hxcpp compile cache
         uses: actions/cache@v4
         with:
-          path: .haxelib
-          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          path: .hxcpp_cache
+          key: ${{ runner.os }}-hxcpp-windows-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-haxelib-
+            ${{ runner.os }}-hxcpp-windows-
 
-      - name: Install dependencies
-        run: haxelib run hmm install
-
-      - name: List installed haxelibs (diagnostic)
-        run: haxelib list
-
-      - name: Setup Lime
-        run: haxelib run lime setup -y
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
 
       - name: Ensure config.json exists
-        shell: bash
-        run: |
-          mkdir -p assets/data
-          if [ ! -f assets/data/config.json ]; then
-            cat > assets/data/config.json << 'CONFIGEOF'
-          {
-            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
-            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
-            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
-            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
-            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
-            "security": { "maxRequestsPerWindow": 20 },
-            "connectivity": { "onlineCheckInterval": 20 },
-            "app": { "buildVersion": "0.1.0" },
-            "discord": { "enabled": false, "clientId": "" }
-          }
-          CONFIGEOF
-            echo "Created placeholder config.json for CI build"
-          fi
+        uses: ./.github/actions/ensure-config
 
       - name: Build Windows
-        shell: bash
+        uses: ./.github/actions/build-retry
         timeout-minutes: 15
-        run: |
-          set -o pipefail
-          attempt=1
-          max_attempts=2
+        with:
+          target: windows
 
-          until haxelib run lime build windows -final; do
-            if [ "$attempt" -ge "$max_attempts" ]; then
-              echo "Build failed after $max_attempts attempts"
-              exit 1
-            fi
-
-            echo "Build attempt $attempt failed, retrying..."
-            attempt=$((attempt + 1))
-          done
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-Windows-logs
+          path: |
+            export/**/*.log
+            *.log
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload artifact
         if: success()
@@ -128,6 +123,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Resolve environment
+        uses: ./.github/actions/resolve-environment
+        with:
+          environment-input: ${{ github.event.inputs.environment }}
+
+      - name: Set version from tag
+        uses: ./.github/actions/set-version
+
+      - name: Cache hxcpp compile cache
+        uses: actions/cache@v4
+        with:
+          path: .hxcpp_cache
+          key: ${{ runner.os }}-hxcpp-android-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-hxcpp-android-
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -138,86 +149,64 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android NDK
-        run: sdkmanager --install "ndk;21.4.7075529"
+        run: sdkmanager --install "ndk;${{ env.ANDROID_NDK_VERSION }}"
 
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
         with:
-          haxe-version: 4.3.7
+          haxe-version: ${{ env.HAXE_VERSION }}
+          skip-lime-setup: "true"
 
-      - name: Install hmm
-        run: haxelib install hmm
-
-      - name: Cache haxelib dependencies
-        uses: actions/cache@v4
-        with:
-          path: .haxelib
-          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
-          restore-keys: |
-            ${{ runner.os }}-haxelib-
-
-      - name: Install dependencies
-        run: haxelib run hmm install
-
-      - name: List installed haxelibs (diagnostic)
-        run: haxelib list
-
-      - name: Setup Lime
+      - name: Configure Lime for Android
         run: |
           haxelib run lime config ANDROID_SDK "$ANDROID_HOME"
-          haxelib run lime config ANDROID_NDK_ROOT "$ANDROID_HOME/ndk/21.4.7075529"
+          haxelib run lime config ANDROID_NDK_ROOT "$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}"
           haxelib run lime config JAVA_HOME "$JAVA_HOME"
           haxelib run lime setup -y android
 
       - name: Ensure config.json exists
-        run: |
-          mkdir -p assets/data
-          if [ ! -f assets/data/config.json ]; then
-            cat > assets/data/config.json << 'CONFIGEOF'
-          {
-            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
-            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
-            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
-            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
-            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
-            "security": { "maxRequestsPerWindow": 20 },
-            "connectivity": { "onlineCheckInterval": 20 },
-            "app": { "buildVersion": "0.1.0" },
-            "discord": { "enabled": false, "clientId": "" }
-          }
-          CONFIGEOF
-            echo "Created placeholder config.json for CI build"
-          fi
+        uses: ./.github/actions/ensure-config
 
-      - name: Generate Android keystore
+      - name: Prepare Android keystore
         run: |
           mkdir -p Certificates
-          keytool -genkeypair -v \
-            -keystore Certificates/android.keystore \
-            -alias android \
-            -storepass android \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Shark, OU=Brenninho, O=Brenninho, L=Unknown, S=Unknown, C=BR"
+
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > Certificates/android.keystore
+            echo "SHARK_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "SHARK_KEYSTORE_ALIAS=${{ secrets.ANDROID_KEYSTORE_ALIAS }}" >> "$GITHUB_ENV"
+            echo "SHARK_KEYSTORE_ALIAS_PASSWORD=${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }}" >> "$GITHUB_ENV"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "::error::Tagged release build requires ANDROID_KEYSTORE_BASE64 and related secrets to be configured - refusing to sign a release with a throwaway keystore."
+            exit 1
+          else
+            keytool -genkeypair -v \
+              -keystore Certificates/android.keystore \
+              -alias android \
+              -storepass android \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Shark, OU=Brenninho, O=Brenninho, L=Unknown, S=Unknown, C=BR"
+          fi
 
       - name: Build Android
+        uses: ./.github/actions/build-retry
         timeout-minutes: 15
-        run: |
-          set -o pipefail
-          attempt=1
-          max_attempts=2
+        with:
+          target: android
 
-          until haxelib run lime build android -final; do
-            if [ "$attempt" -ge "$max_attempts" ]; then
-              echo "Build failed after $max_attempts attempts"
-              exit 1
-            fi
-
-            echo "Build attempt $attempt failed, retrying..."
-            attempt=$((attempt + 1))
-          done
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-Android-logs
+          path: |
+            export/**/*.log
+            *.log
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload artifact
         if: success()
@@ -236,6 +225,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Resolve environment
+        uses: ./.github/actions/resolve-environment
+        with:
+          environment-input: ${{ github.event.inputs.environment }}
+
+      - name: Set version from tag
+        uses: ./.github/actions/set-version
+
+      - name: Cache hxcpp compile cache
+        uses: actions/cache@v4
+        with:
+          path: .hxcpp_cache
+          key: ${{ runner.os }}-hxcpp-linux-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-hxcpp-linux-
+
       - name: Install native build dependencies
         run: |
           sudo apt-get update
@@ -252,67 +257,30 @@ jobs:
             libvlccore-dev \
             vlc
 
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
         with:
-          haxe-version: 4.3.7
-
-      - name: Install hmm
-        run: haxelib install hmm
-
-      - name: Cache haxelib dependencies
-        uses: actions/cache@v4
-        with:
-          path: .haxelib
-          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
-          restore-keys: |
-            ${{ runner.os }}-haxelib-
-
-      - name: Install dependencies
-        run: haxelib run hmm install
-
-      - name: List installed haxelibs (diagnostic)
-        run: haxelib list
-
-      - name: Setup Lime
-        run: haxelib run lime setup -y
+          haxe-version: ${{ env.HAXE_VERSION }}
 
       - name: Ensure config.json exists
-        run: |
-          mkdir -p assets/data
-          if [ ! -f assets/data/config.json ]; then
-            cat > assets/data/config.json << 'CONFIGEOF'
-          {
-            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
-            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
-            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
-            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
-            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
-            "security": { "maxRequestsPerWindow": 20 },
-            "connectivity": { "onlineCheckInterval": 20 },
-            "app": { "buildVersion": "0.1.0" },
-            "discord": { "enabled": false, "clientId": "" }
-          }
-          CONFIGEOF
-            echo "Created placeholder config.json for CI build"
-          fi
+        uses: ./.github/actions/ensure-config
 
       - name: Build Linux
+        uses: ./.github/actions/build-retry
         timeout-minutes: 15
-        run: |
-          set -o pipefail
-          attempt=1
-          max_attempts=2
+        with:
+          target: linux
 
-          until haxelib run lime build linux -final; do
-            if [ "$attempt" -ge "$max_attempts" ]; then
-              echo "Build failed after $max_attempts attempts"
-              exit 1
-            fi
-
-            echo "Build attempt $attempt failed, retrying..."
-            attempt=$((attempt + 1))
-          done
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-Linux-logs
+          path: |
+            export/**/*.log
+            *.log
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload artifact
         if: success()
@@ -336,68 +304,36 @@ jobs:
         uses: actions/checkout@v4
         timeout-minutes: 5
 
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2
+      - name: Resolve environment
+        uses: ./.github/actions/resolve-environment
         with:
-          haxe-version: 4.3.7
-        timeout-minutes: 10
+          environment-input: ${{ github.event.inputs.environment }}
 
-      - name: Install hmm
-        run: haxelib install hmm
+      - name: Set version from tag
+        uses: ./.github/actions/set-version
 
-      - name: Cache haxelib dependencies
+      - name: Cache hxcpp compile cache
         uses: actions/cache@v4
         with:
-          path: .haxelib
-          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          path: .hxcpp_cache
+          key: ${{ runner.os }}-hxcpp-mac-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-haxelib-
+            ${{ runner.os }}-hxcpp-mac-
 
-      - name: Install dependencies
-        run: haxelib run hmm install
-
-      - name: List installed haxelibs (diagnostic)
-        run: haxelib list
-
-      - name: Setup Lime
-        run: haxelib run lime setup -y
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+        timeout-minutes: 10
 
       - name: Ensure config.json exists
-        run: |
-          mkdir -p assets/data
-          if [ ! -f assets/data/config.json ]; then
-            cat > assets/data/config.json << 'CONFIGEOF'
-          {
-            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
-            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
-            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
-            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
-            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
-            "security": { "maxRequestsPerWindow": 20 },
-            "connectivity": { "onlineCheckInterval": 20 },
-            "app": { "buildVersion": "0.1.0" },
-            "discord": { "enabled": false, "clientId": "" }
-          }
-          CONFIGEOF
-            echo "Created placeholder config.json for CI build"
-          fi
+        uses: ./.github/actions/ensure-config
 
       - name: Build macOS
+        uses: ./.github/actions/build-retry
         timeout-minutes: 15
-        run: |
-          set -o pipefail
-          attempt=1
-          max_attempts=2
-
-          until haxelib run lime build mac -final; do
-            if [ "$attempt" -ge "$max_attempts" ]; then
-              echo "Build failed after $max_attempts attempts"
-              exit 1
-            fi
-
-            echo "Build attempt $attempt failed, retrying..."
-            attempt=$((attempt + 1))
-          done
+        with:
+          target: mac
 
       - name: List build output for debugging
         if: always()
@@ -406,6 +342,17 @@ jobs:
           ls -la
           echo "--- export directory (if any) ---"
           find export -maxdepth 4 2>/dev/null || echo "no export directory found"
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-macOS-logs
+          path: |
+            export/**/*.log
+            *.log
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload artifact
         if: success()
@@ -430,73 +377,51 @@ jobs:
         uses: actions/checkout@v4
         timeout-minutes: 5
 
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2
+      - name: Resolve environment
+        uses: ./.github/actions/resolve-environment
         with:
-          haxe-version: 4.3.7
-        timeout-minutes: 10
+          environment-input: ${{ github.event.inputs.environment }}
 
-      - name: Install hmm
-        run: haxelib install hmm
+      - name: Set version from tag
+        uses: ./.github/actions/set-version
 
-      - name: Cache haxelib dependencies
+      - name: Cache hxcpp compile cache
         uses: actions/cache@v4
         with:
-          path: .haxelib
-          key: ${{ runner.os }}-haxelib-${{ hashFiles('hmm.json') }}
+          path: .hxcpp_cache
+          key: ${{ runner.os }}-hxcpp-ios-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-haxelib-
+            ${{ runner.os }}-hxcpp-ios-
 
-      - name: Install dependencies
-        run: haxelib run hmm install
-
-      - name: List installed haxelibs (diagnostic)
-        run: haxelib list
-
-      - name: Setup Lime
-        run: haxelib run lime setup -y
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+        timeout-minutes: 10
 
       - name: Ensure config.json exists
-        run: |
-          mkdir -p assets/data
-          if [ ! -f assets/data/config.json ]; then
-            cat > assets/data/config.json << 'CONFIGEOF'
-          {
-            "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
-            "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
-            "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
-            "image": { "cacheEnabled": true, "autoSaveToStorage": true },
-            "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
-            "security": { "maxRequestsPerWindow": 20 },
-            "connectivity": { "onlineCheckInterval": 20 },
-            "app": { "buildVersion": "0.1.0" },
-            "discord": { "enabled": false, "clientId": "" }
-          }
-          CONFIGEOF
-            echo "Created placeholder config.json for CI build"
-          fi
+        uses: ./.github/actions/ensure-config
 
       - name: Select Xcode
-        run: |
-          sudo xcode-select -s /Applications/Xcode_15.2.app || sudo xcode-select -s /Applications/Xcode.app
-          rm -rf ~/Library/Developer/Xcode/DerivedData
+        uses: ./.github/actions/select-xcode
 
       - name: Build iOS (simulator)
+        uses: ./.github/actions/build-retry
         timeout-minutes: 15
-        run: |
-          set -o pipefail
-          attempt=1
-          max_attempts=2
+        with:
+          target: ios
+          extra-args: "-simulator"
 
-          until haxelib run lime build ios -simulator -final; do
-            if [ "$attempt" -ge "$max_attempts" ]; then
-              echo "Build failed after $max_attempts attempts"
-              exit 1
-            fi
-
-            echo "Build attempt $attempt failed, retrying..."
-            attempt=$((attempt + 1))
-          done
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shark-iOS-logs
+          path: |
+            export/**/*.log
+            *.log
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload artifact
         if: success()
@@ -530,7 +455,13 @@ jobs:
           echo "| iOS (simulator) | ${{ needs.build-ios.result }} |" >> "$GITHUB_STEP_SUMMARY"
 
   create-release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.build-windows.result == 'success' &&
+      needs.build-android.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-mac.result == 'success' &&
+      needs.build-ios.result == 'success'
     needs:
       - build-windows
       - build-android
@@ -538,6 +469,8 @@ jobs:
       - build-mac
       - build-ios
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
