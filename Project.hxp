@@ -1,5 +1,9 @@
 import hxp.*;
 import lime.tools.*;
+import haxe.Json;
+import haxe.io.Path;
+import sys.FileSystem;
+import sys.io.File;
 
 class Project extends HXProject
 {
@@ -8,20 +12,35 @@ class Project extends HXProject
 	static inline var APP_VERSION:String = "0.1.0";
 	static inline var APP_COMPANY:String = "Brenninho";
 	static inline var DEV_BRANCH_NAME:String = "dev";
+	static inline var STAGING_BRANCH_NAME:String = "staging";
 	static inline var MAIN_BRANCH_NAME:String = "main";
+	static inline var ASTC_WARN_THRESHOLD_BYTES:Int = 400000;
+	static inline var ASSET_WARN_THRESHOLD_BYTES:Int = 250000000;
 
 	var isDevBranch:Bool;
+	var isStagingBranch:Bool;
 	var isMainBranch:Bool;
 	var gitBranch:String;
 	var isGitAvailable:Bool = true;
+	var environment:String;
+	var envVars:Map<String, String> = new Map();
+	var activeFeatures:Array<String> = [];
+	var buildWarnings:Array<String> = [];
+	var buildStartTime:Float;
 
 	public function new()
 	{
 		super();
 
+		buildStartTime = Sys.time();
+
+		loadEnvFile();
+
 		gitBranch = resolveGitBranch();
 		isDevBranch = gitBranch == DEV_BRANCH_NAME;
+		isStagingBranch = gitBranch == STAGING_BRANCH_NAME;
 		isMainBranch = gitBranch == MAIN_BRANCH_NAME;
+		environment = resolveEnvironment();
 
 		setupMeta();
 		setupApp();
@@ -30,9 +49,14 @@ class Project extends HXProject
 		setupHaxelibs();
 		setupAssets();
 		setupIcon();
+		setupLocalization();
+		setupFeatureFlags();
 		setupDefines();
 		setupOptimizations();
+
 		checkConfigJson();
+		checkDependencyIntegrity();
+		validateAssetIntegrity();
 
 		switch (target)
 		{
@@ -49,31 +73,231 @@ class Project extends HXProject
 			case MAC:
 				setupMac();
 			default:
+				buildWarnings.push('Unrecognized target "$target" - no platform-specific setup applied.');
 		}
 
 		setupDevMode();
+		setupStagingMode();
 		setupProductionMode();
+
+		writeBuildInfo();
+		maybeCreateGitTag();
+
 		logBuildSummary();
+	}
+
+	function loadEnvFile():Void
+	{
+		var candidates:Array<String> = [".env", ".env.local"];
+
+		for (path in candidates)
+		{
+			if (!FileSystem.exists(path))
+				continue;
+
+			try
+			{
+				var lines:Array<String> = File.getContent(path).split("\n");
+
+				for (rawLine in lines)
+				{
+					var line:String = StringTools.trim(rawLine);
+
+					if (line.length == 0 || StringTools.startsWith(line, "#"))
+						continue;
+
+					var separatorIndex:Int = line.indexOf("=");
+
+					if (separatorIndex == -1)
+						continue;
+
+					var key:String = StringTools.trim(line.substr(0, separatorIndex));
+					var value:String = StringTools.trim(line.substr(separatorIndex + 1));
+
+					if (value.length >= 2 && StringTools.startsWith(value, "\"") && StringTools.endsWith(value, "\""))
+						value = value.substr(1, value.length - 2);
+
+					envVars.set(key, value);
+				}
+			}
+			catch (e:Dynamic)
+			{
+				buildWarnings.push('Failed to parse $path - ignoring it.');
+			}
+		}
+	}
+
+	function envOr(name:String, fallback:String):String
+	{
+		var systemValue:String = Sys.getEnv(name);
+
+		if (systemValue != null && systemValue.length > 0)
+			return systemValue;
+
+		if (envVars.exists(name))
+		{
+			var localValue:String = envVars.get(name);
+
+			if (localValue != null && localValue.length > 0)
+				return localValue;
+		}
+
+		return fallback;
+	}
+
+	function resolveEnvironment():String
+	{
+		var explicit:String = envOr("SHARK_ENV", "");
+
+		if (explicit == "dev" || explicit == "staging" || explicit == "production")
+			return explicit;
+
+		if (isMainBranch)
+			return "production";
+
+		if (isStagingBranch)
+			return "staging";
+
+		return "dev";
 	}
 
 	function checkConfigJson():Void
 	{
-		if (!sys.FileSystem.exists("assets/data/config.json"))
+		var path:String = "assets/data/config.json";
+
+		if (!FileSystem.exists(path))
 		{
-			Log.warn("assets/data/config.json not found - run `haxe --run setup/application/Setup.hx` first, or the chat/image API won't be configured.");
+			buildWarnings.push('$path not found - run `haxe --run setup/application/Setup.hx` first, or the chat/image API will not be configured.');
+			return;
 		}
+
+		try
+		{
+			var parsed:Dynamic = Json.parse(File.getContent(path));
+			var requiredKeys:Array<String> = ["chatApiEndpoint", "imageApiEndpoint", "apiTimeoutSeconds"];
+
+			for (key in requiredKeys)
+			{
+				if (!Reflect.hasField(parsed, key))
+					buildWarnings.push('$path is missing required field "$key".');
+			}
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push('$path exists but is not valid JSON - the chat/image API may fail to configure at runtime.');
+		}
+	}
+
+	function checkDependencyIntegrity():Void
+	{
+		var required:Array<String> = ["lime", "openfl", "flixel", "flixel-addons", "hscript", "polymod"];
+		var missing:Array<String> = [];
+
+		try
+		{
+			var process = new sys.io.Process("haxelib", ["list"]);
+			var output:String = process.stdout.readAll().toString();
+			process.close();
+
+			for (lib in required)
+				if (output.indexOf(lib) == -1)
+					missing.push(lib);
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push("Could not run `haxelib list` to verify installed dependencies - skipping integrity check.");
+			return;
+		}
+
+		if (missing.length > 0)
+			buildWarnings.push('The following haxelibs appear to be missing locally: ${missing.join(", ")} - run `haxelib install <name>`.');
+	}
+
+	function validateAssetIntegrity():Void
+	{
+		if (!FileSystem.exists("assets/images/icon.png"))
+			buildWarnings.push("assets/images/icon.png not found - the app icon will fail to package.");
+
+		if (!FileSystem.exists("assets/images") || !FileSystem.isDirectory("assets/images") || FileSystem.readDirectory("assets/images").length == 0)
+		{
+			buildWarnings.push("assets/images is missing or empty.");
+			return;
+		}
+
+		var totalSize:Int = 0;
+		var uncompressedLargeTextures:Array<String> = [];
+
+		scanDirectory("assets/images", function(fullPath:String, size:Int)
+		{
+			totalSize += size;
+
+			if (StringTools.endsWith(fullPath, ".png") && size > ASTC_WARN_THRESHOLD_BYTES && (target == ANDROID || target == IOS))
+				uncompressedLargeTextures.push(fullPath);
+		});
+
+		if (totalSize > ASSET_WARN_THRESHOLD_BYTES)
+			buildWarnings.push('assets/images totals ${formatBytes(totalSize)}, which is unusually large - consider trimming unused assets.');
+
+		if (uncompressedLargeTextures.length > 0)
+			buildWarnings.push('${uncompressedLargeTextures.length} texture(s) over ${formatBytes(ASTC_WARN_THRESHOLD_BYTES)} are still raw PNG for a mobile target - consider ASTC compression: ${uncompressedLargeTextures.join(", ")}');
+	}
+
+	function scanDirectory(path:String, onFile:String->Int->Void):Void
+	{
+		if (!FileSystem.exists(path))
+			return;
+
+		for (entry in FileSystem.readDirectory(path))
+		{
+			var fullPath:String = '$path/$entry';
+
+			if (FileSystem.isDirectory(fullPath))
+			{
+				scanDirectory(fullPath, onFile);
+				continue;
+			}
+
+			try
+			{
+				onFile(fullPath, FileSystem.stat(fullPath).size);
+			}
+			catch (e:Dynamic) {}
+		}
+	}
+
+	function formatBytes(bytes:Int):String
+	{
+		if (bytes >= 1000000)
+			return (bytes / 1000000).toStringPrecision(2) + " MB";
+
+		if (bytes >= 1000)
+			return (bytes / 1000).toStringPrecision(2) + " KB";
+
+		return '$bytes B';
 	}
 
 	function logBuildSummary():Void
 	{
 		var devTag:String = isDevBranch ? " [DEV BRANCH]" : "";
-		Log.info('Shark ${meta.version} (build ${meta.buildNumber}, commit ${haxedefs.get("SHARK_COMMIT")}, branch $gitBranch) -> $target, ${debug ? "debug" : "release"}$devTag');
+		var elapsed:Float = Sys.time() - buildStartTime;
+
+		Log.info('Shark ${meta.version} (build ${meta.buildNumber}, commit ${haxedefs.get("SHARK_COMMIT")}, branch $gitBranch, env $environment) -> $target, ${debug ? "debug" : "release"}$devTag');
 
 		if (!isGitAvailable)
 			Log.warn("git was not found or this is not a git repository - commit hash, branch, and tag/working-tree checks fell back to defaults.");
 
 		if (activeFeatures.length > 0)
 			Log.info('Active optional features for this build: ${activeFeatures.join(", ")}');
+
+		if (buildWarnings.length > 0)
+		{
+			Log.warn('${buildWarnings.length} warning(s) collected during project setup:');
+
+			for (warning in buildWarnings)
+				Log.warn('  - $warning');
+		}
+
+		Log.info('Project.hxp setup finished in ${elapsed.toStringPrecision(3)}s');
 	}
 
 	function setupMeta():Void
@@ -88,14 +312,14 @@ class Project extends HXProject
 
 	function resolveVersion():String
 	{
-		if (sys.FileSystem.exists("VERSION"))
+		if (FileSystem.exists("VERSION"))
 		{
-			var content:String = StringTools.trim(sys.io.File.getContent("VERSION"));
+			var content:String = StringTools.trim(File.getContent("VERSION"));
 
 			if (content.length > 0)
 			{
 				if (!isValidVersionFormat(content))
-					Log.warn('VERSION file contains "$content", which does not look like a semver string (e.g. 1.2.3) - using it anyway.');
+					buildWarnings.push('VERSION file contains "$content", which does not look like a semver string (e.g. 1.2.3) - using it anyway.');
 
 				return content;
 			}
@@ -142,59 +366,58 @@ class Project extends HXProject
 		sources.push("source");
 	}
 
-	var activeFeatures:Array<String> = [];
-
 	function setupHaxelibs():Void
 	{
-		haxelibs.push(new Haxelib("lime"));
-		haxelibs.push(new Haxelib("openfl"));
-		haxelibs.push(new Haxelib("flixel"));
-		haxelibs.push(new Haxelib("flixel-addons"));
-		haxelibs.push(new Haxelib("flixel-ui"));
-		haxelibs.push(new Haxelib("hscript"));
-		haxelibs.push(new Haxelib("SScript"));
+		var pinned:Map<String, String> = loadPinnedVersions();
+
+		addHaxelib("lime", pinned);
+		addHaxelib("openfl", pinned);
+		addHaxelib("flixel", pinned);
+		addHaxelib("flixel-addons", pinned);
+		addHaxelib("flixel-ui", pinned);
+		addHaxelib("hscript", pinned);
+		addHaxelib("SScript", pinned);
 
 		if (debug)
 		{
-			haxelibs.push(new Haxelib("flixel-demos"));
+			addHaxelib("flixel-demos", pinned);
 			activeFeatures.push("flixel-demos (debug reference)");
 		}
 
 		if (target != HTML5)
 		{
-			haxelibs.push(new Haxelib("hxdiscord_rpc"));
+			addHaxelib("hxdiscord_rpc", pinned);
 			activeFeatures.push("Discord Rich Presence");
 		}
 
 		if (target == ANDROID)
 		{
-			haxelibs.push(new Haxelib("extension-androidtools"));
+			addHaxelib("extension-androidtools", pinned);
 			activeFeatures.push("Android native tools");
 		}
 
-		haxelibs.push(new Haxelib("polymod"));
+		addHaxelib("polymod", pinned);
 		activeFeatures.push("Polymod");
 
 		if (target == WINDOWS || target == MAC || target == LINUX || target == ANDROID || target == IOS)
 		{
-			haxelibs.push(new Haxelib("hxvlc"));
+			addHaxelib("hxvlc", pinned);
 			activeFeatures.push("Video playback (hxvlc)");
 		}
 
-		haxelibs.push(new Haxelib("hxmath"));
+		addHaxelib("hxmath", pinned);
 		haxedefs.set("HXMATH_USE_OPENFL_STRUCTURES", "");
 
-		haxelibs.push(new Haxelib("haxeui-core"));
-		haxelibs.push(new Haxelib("haxeui-flixel"));
+		addHaxelib("haxeui-core", pinned);
+		addHaxelib("haxeui-flixel", pinned);
 		activeFeatures.push("HaxeUI");
 
-		haxelibs.push(new Haxelib("newgrounds"));
+		addHaxelib("newgrounds", pinned);
 		activeFeatures.push("Newgrounds API");
-
 
 		if (target == ANDROID || target == IOS)
 		{
-			haxelibs.push(new Haxelib("extension-admob"));
+			addHaxelib("extension-admob", pinned);
 			activeFeatures.push("AdMob");
 
 			if (target == ANDROID)
@@ -206,19 +429,65 @@ class Project extends HXProject
 
 		if (target == LINUX)
 		{
-			haxelibs.push(new Haxelib("hxgamemode"));
+			addHaxelib("hxgamemode", pinned);
 			activeFeatures.push("Linux GameMode");
 		}
 
-		haxelibs.push(new Haxelib("flxanimate"));
+		addHaxelib("flxanimate", pinned);
+
+		if (!debug && environment != "production" && envOr("SHARK_SENTRY_DSN", "").length > 0)
+		{
+			addHaxelib("sentry", pinned);
+			activeFeatures.push("Crash reporting (Sentry)");
+		}
 
 		if (debug)
 		{
-			haxelibs.push(new Haxelib("munit"));
-			haxelibs.push(new Haxelib("mconsole"));
-			haxelibs.push(new Haxelib("mcover"));
-			activeFeatures.push("Unit testing (munit/mcover, debug only)");
+			addHaxelib("munit", pinned);
+			addHaxelib("mconsole", pinned);
+			activeFeatures.push("Unit testing (munit, debug only)");
+
+			if (envOr("SHARK_COVERAGE", "") == "1")
+			{
+				addHaxelib("mcover", pinned);
+				haxeflags.push("--macro mcover.MCover.instrument()");
+				activeFeatures.push("Code coverage (mcover)");
+			}
 		}
+	}
+
+	function loadPinnedVersions():Map<String, String>
+	{
+		var pinned:Map<String, String> = new Map();
+		var path:String = "haxelib_versions.json";
+
+		if (!FileSystem.exists(path))
+			return pinned;
+
+		try
+		{
+			var parsed:Dynamic = Json.parse(File.getContent(path));
+
+			for (field in Reflect.fields(parsed))
+				pinned.set(field, Reflect.field(parsed, field));
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push('$path exists but could not be parsed - ignoring version pins.');
+		}
+
+		return pinned;
+	}
+
+	function addHaxelib(name:String, pinned:Map<String, String>):Void
+	{
+		if (pinned.exists(name))
+		{
+			haxelibs.push(new Haxelib(name, pinned.get(name)));
+			return;
+		}
+
+		haxelibs.push(new Haxelib(name));
 	}
 
 	function setupAssets():Void
@@ -226,10 +495,10 @@ class Project extends HXProject
 		includeAssets("assets/images", "assets/images");
 		includeAssets("assets/data", "assets/data");
 
-		if (sys.FileSystem.exists("assets/fonts") && sys.FileSystem.readDirectory("assets/fonts").length > 0)
+		if (FileSystem.exists("assets/fonts") && FileSystem.readDirectory("assets/fonts").length > 0)
 			includeAssets("assets/fonts", "assets/fonts");
 
-		if (sys.FileSystem.exists("assets/shaders") && sys.FileSystem.readDirectory("assets/shaders").length > 0)
+		if (FileSystem.exists("assets/shaders") && FileSystem.readDirectory("assets/shaders").length > 0)
 			includeAssets("assets/shaders", "assets/shaders");
 
 		setupMods();
@@ -240,10 +509,10 @@ class Project extends HXProject
 		if (target == HTML5)
 			return;
 
-		if (!sys.FileSystem.exists("mods") || !sys.FileSystem.isDirectory("mods"))
+		if (!FileSystem.exists("mods") || !FileSystem.isDirectory("mods"))
 			return;
 
-		var entries:Array<String> = sys.FileSystem.readDirectory("mods");
+		var entries:Array<String> = FileSystem.readDirectory("mods");
 
 		if (entries.length == 0)
 			return;
@@ -255,7 +524,7 @@ class Project extends HXProject
 		{
 			var fullPath:String = 'mods/$entry';
 
-			if (sys.FileSystem.isDirectory(fullPath))
+			if (FileSystem.isDirectory(fullPath))
 				folderModCount++;
 			else if (StringTools.endsWith(entry, ".hxs"))
 				scriptModCount++;
@@ -278,9 +547,67 @@ class Project extends HXProject
 			haxedefs.set("POLYMOD_DEBUG", "");
 	}
 
+	function setupLocalization():Void
+	{
+		var path:String = "assets/data/locales";
+
+		if (!FileSystem.exists(path) || !FileSystem.isDirectory(path))
+			return;
+
+		var locales:Array<String> = [];
+
+		for (entry in FileSystem.readDirectory(path))
+			if (StringTools.endsWith(entry, ".json"))
+				locales.push(Path.withoutExtension(entry));
+
+		if (locales.length == 0)
+			return;
+
+		includeAssets(path, "assets/data/locales");
+		haxedefs.set("SHARK_LOCALES", locales.join(","));
+		haxedefs.set("SHARK_DEFAULT_LOCALE", envOr("SHARK_DEFAULT_LOCALE", locales.indexOf("en") != -1 ? "en" : locales[0]));
+
+		activeFeatures.push('Localization (${locales.length} locale(s): ${locales.join(", ")})');
+	}
+
+	function setupFeatureFlags():Void
+	{
+		var path:String = "assets/data/features.json";
+
+		if (!FileSystem.exists(path))
+			return;
+
+		try
+		{
+			var parsed:Dynamic = Json.parse(File.getContent(path));
+
+			for (field in Reflect.fields(parsed))
+			{
+				var enabled:Dynamic = Reflect.field(parsed, field);
+
+				if (enabled == true)
+				{
+					haxedefs.set('SHARK_FEATURE_${field.toUpperCase()}', "");
+					activeFeatures.push('Feature flag: $field');
+				}
+			}
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push('$path exists but could not be parsed - no feature flags applied.');
+		}
+	}
+
 	function setupIcon():Void
 	{
 		icons.push(new Icon("assets/images/icon.png"));
+
+		if (target == ANDROID && FileSystem.exists("assets/images/icon_adaptive_fg.png") && FileSystem.exists("assets/images/icon_adaptive_bg.png"))
+		{
+			icons.push(new Icon("assets/images/icon_adaptive_fg.png", -1, -1, "foreground"));
+			icons.push(new Icon("assets/images/icon_adaptive_bg.png", -1, -1, "background"));
+			activeFeatures.push("Android adaptive icon");
+		}
 	}
 
 	function setupDefines():Void
@@ -293,6 +620,455 @@ class Project extends HXProject
 
 		haxedefs.set("SHARK_VERSION", APP_VERSION);
 		haxedefs.set("SHARK_COMMIT", resolveGitCommit());
+		haxedefs.set("SHARK_ENVIRONMENT", environment);
+		haxedefs.set("SHARK_BUILD_TIMESTAMP", Std.string(Std.int(Date.now().getTime() / 1000)));
+
+		var sentryDsn:String = envOr("SHARK_SENTRY_DSN", "");
+
+		if (sentryDsn.length > 0)
+			haxedefs.set("SHARK_SENTRY_DSN", sentryDsn);
+		else if (environment == "production")
+			buildWarnings.push("No SHARK_SENTRY_DSN set for a production build - crash reporting will be disabled.");
+	}
+
+	function setupOptimizations():Void
+	{
+		if (!debug)
+		{
+			haxeflags.push("-dce full");
+			haxeflags.push("-D no-traces");
+			haxeflags.push("-D analyzer-optimize");
+		}
+	}
+
+	function setupWindows():Void
+	{
+		window.width = 1280;
+		window.height = 720;
+		window.resizable = true;
+		window.background = 0x00111F;
+
+		architectures = [Architecture.X64];
+
+		haxedefs.set("SHARK_PLATFORM", "windows");
+
+		if (!debug)
+		{
+			haxeflags.push("-dce full");
+			haxeflags.push("-D no-traces");
+
+			if (envOr("SHARK_SIGN_WINDOWS", "") != "1")
+				buildWarnings.push("SHARK_SIGN_WINDOWS is not set to 1 - the Windows build will not be code-signed.");
+		}
+
+		cleanIfRequested("windows");
+	}
+
+	function setupAndroid():Void
+	{
+		window.orientation = LANDSCAPE;
+		window.fullscreen = true;
+		window.hardware = true;
+
+		architectures = [Architecture.ARMV7, Architecture.ARM64];
+
+		haxedefs.set("SHARK_PLATFORM", "android");
+		haxedefs.set("FLX_NO_NATIVE_CURSOR", "");
+		haxedefs.set("FLX_NO_SOUND_TRAY", "");
+
+		var permissions:Array<String> = [
+			"android.permission.INTERNET",
+			"android.permission.WRITE_EXTERNAL_STORAGE",
+			"android.permission.READ_EXTERNAL_STORAGE",
+			"android.permission.RECORD_AUDIO",
+			"android.permission.READ_MEDIA_IMAGES",
+			"android.permission.READ_MEDIA_AUDIO",
+			"android.permission.FOREGROUND_SERVICE"
+		];
+
+		config.set("android.permissions", permissions.join(" "));
+		config.set("android.target-sdk-version", "35");
+		config.set("android.minimum-sdk-version", "21");
+		config.set("android.install-location", "auto");
+		config.set("android.window-soft-input-mode", "adjustResize");
+		config.set("android.version-code", meta.buildNumber);
+
+		if (!debug)
+		{
+			var keystoreProfile:String = envOr("SHARK_KEYSTORE_PROFILE", "default");
+			var keystorePathKey:String = keystoreProfile == "default" ? "SHARK_KEYSTORE_PATH" : 'SHARK_KEYSTORE_PATH_${keystoreProfile.toUpperCase()}';
+
+			config.set("android.certificate-path", envOr(keystorePathKey, "Certificates/android.keystore"));
+			config.set("android.certificate-password", envOr("SHARK_KEYSTORE_PASSWORD", "android"));
+			config.set("android.certificate-alias", envOr("SHARK_KEYSTORE_ALIAS", "android"));
+			config.set("android.certificate-alias-password", envOr("SHARK_KEYSTORE_ALIAS_PASSWORD", "android"));
+
+			if (!FileSystem.exists(config.get("android.certificate-path")))
+				buildWarnings.push('Android keystore not found at "${config.get("android.certificate-path")}" - the release build will fail to sign.');
+		}
+	}
+
+	function setupIOS():Void
+	{
+		window.orientation = LANDSCAPE;
+		window.fullscreen = true;
+
+		haxedefs.set("SHARK_PLATFORM", "ios");
+		haxedefs.set("FLX_NO_NATIVE_CURSOR", "");
+		haxedefs.set("FLX_NO_SOUND_TRAY", "");
+
+		config.set("ios.deployment", "12.0");
+		config.set("ios.device", "universal");
+		config.set("ios.extension", "false");
+		config.set("ios.build-number", meta.buildNumber);
+
+		if (!debug && envOr("SHARK_IOS_TEAM_ID", "").length == 0)
+			buildWarnings.push("SHARK_IOS_TEAM_ID is not set - Xcode signing may require manual configuration.");
+	}
+
+	function setupHTML5():Void
+	{
+		window.resizable = true;
+		window.allowHighDPI = true;
+		window.background = 0x00111F;
+
+		haxedefs.set("SHARK_PLATFORM", "html5");
+
+		config.set("html5.title", APP_TITLE);
+
+		if (envOr("SHARK_PWA", "1") == "1")
+		{
+			writePwaManifest();
+			activeFeatures.push("PWA manifest");
+		}
+	}
+
+	function writePwaManifest():Void
+	{
+		var manifestPath:String = "assets/data/manifest.webmanifest";
+
+		var manifest:Dynamic = {
+			name: APP_TITLE,
+			short_name: APP_TITLE,
+			start_url: "./",
+			display: "standalone",
+			background_color: "#00111F",
+			theme_color: "#00111F",
+			icons: [{src: "assets/images/icon.png", sizes: "512x512", type: "image/png"}]
+		};
+
+		try
+		{
+			if (!FileSystem.exists("assets/data"))
+				FileSystem.createDirectory("assets/data");
+
+			File.saveContent(manifestPath, Json.stringify(manifest, null, "\t"));
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push("Failed to write PWA manifest - HTML5 build will not be installable.");
+		}
+	}
+
+	function setupLinux():Void
+	{
+		window.width = 1280;
+		window.height = 720;
+		window.resizable = true;
+		window.background = 0x00111F;
+
+		architectures = [Architecture.X64];
+
+		haxedefs.set("SHARK_PLATFORM", "linux");
+
+		cleanIfRequested("linux");
+	}
+
+	function setupMac():Void
+	{
+		window.width = 1280;
+		window.height = 720;
+		window.resizable = true;
+		window.background = 0x00111F;
+
+		architectures = [Architecture.X64];
+
+		haxedefs.set("SHARK_PLATFORM", "mac");
+
+		if (!debug && envOr("SHARK_NOTARIZE_MAC", "") != "1")
+			buildWarnings.push("SHARK_NOTARIZE_MAC is not set to 1 - the macOS build will not be notarized.");
+
+		cleanIfRequested("mac");
+	}
+
+	function cleanIfRequested(platformFolder:String):Void
+	{
+		if (envOr("SHARK_CLEAN_BUILD", "") != "1")
+			return;
+
+		var exportPath:String = 'export/$platformFolder';
+
+		if (FileSystem.exists(exportPath))
+		{
+			Log.info('SHARK_CLEAN_BUILD=1 -> removing $exportPath before build');
+			deleteRecursive(exportPath);
+		}
+	}
+
+	function deleteRecursive(path:String):Void
+	{
+		if (!FileSystem.exists(path))
+			return;
+
+		if (FileSystem.isDirectory(path))
+		{
+			for (entry in FileSystem.readDirectory(path))
+				deleteRecursive('$path/$entry');
+
+			FileSystem.deleteDirectory(path);
+		}
+		else
+		{
+			FileSystem.deleteFile(path);
+		}
+	}
+
+	function setupDevMode():Void
+	{
+		if (environment != "dev")
+			return;
+
+		haxedefs.set("SHARK_DEV_MODE", "");
+
+		meta.title = '$APP_TITLE (dev)';
+		window.background = 0xFF2A0A0A;
+
+		Log.info('Environment "dev" (branch "$gitBranch") - SHARK_DEV_MODE enabled (dev-only window tint, title suffix).');
+	}
+
+	function setupStagingMode():Void
+	{
+		if (environment != "staging")
+			return;
+
+		haxedefs.set("SHARK_STAGING_MODE", "");
+
+		meta.title = '$APP_TITLE (staging)';
+		window.background = 0xFF1A2A00;
+
+		Log.info('Environment "staging" (branch "$gitBranch") - SHARK_STAGING_MODE enabled.');
+	}
+
+	function setupProductionMode():Void
+	{
+		if (environment != "production")
+			return;
+
+		haxedefs.set("SHARK_PRODUCTION", "");
+
+		var checklist:Array<String> = [];
+		var failures:Array<String> = [];
+
+		checkProductionItem(checklist, failures, "config.json present", FileSystem.exists("assets/data/config.json"), !debug);
+		checkProductionItem(checklist, failures, "VERSION format valid", isValidVersionFormat(meta.version), !debug);
+		checkProductionItem(checklist, failures, "no leftover dev define", !haxedefs.exists("SHARK_DEV_MODE"), false);
+		checkProductionItem(checklist, failures, "working tree clean (no uncommitted changes)", isWorkingTreeClean(), false);
+		checkProductionItem(checklist, failures, "no merge conflict markers in source/", !hasMergeConflictMarkers(), true);
+		checkProductionItem(checklist, failures, 'version "${meta.version}" has a matching git tag', hasMatchingGitTag(meta.version), false);
+		checkProductionItem(checklist, failures, 'CHANGELOG.md mentions "${meta.version}"', changelogMentionsVersion(meta.version), false);
+		checkProductionItem(checklist, failures, "no broken mod folders (missing _polymod_meta.json)", !hasIncompleteModFolders(), false);
+		checkProductionItem(checklist, failures, "no unresolved setup warnings", buildWarnings.length == 0, false);
+
+		if (target == ANDROID && !debug)
+		{
+			var keystorePath:String = envOr("SHARK_KEYSTORE_PATH", "Certificates/android.keystore");
+			checkProductionItem(checklist, failures, 'Android keystore exists ($keystorePath)', FileSystem.exists(keystorePath), true);
+		}
+
+		if (!debug)
+			checklist.push("[OK] release optimizations active (see setupOptimizations)");
+
+		Log.info('Production checklist (branch "$MAIN_BRANCH_NAME"):\n  ' + checklist.join("\n  "));
+
+		if (failures.length > 0 && !debug)
+		{
+			Log.error('Production build blocked - fix the following before building from $MAIN_BRANCH_NAME:\n  ' + failures.join("\n  "));
+			Sys.exit(1);
+		}
+	}
+
+	function checkProductionItem(checklist:Array<String>, failures:Array<String>, label:String, passed:Bool, isBlocking:Bool):Void
+	{
+		if (passed)
+		{
+			checklist.push('[OK] $label');
+			return;
+		}
+
+		if (isBlocking)
+		{
+			checklist.push('[FAIL] $label');
+			failures.push(label);
+		}
+		else
+		{
+			checklist.push('[WARN] $label');
+		}
+	}
+
+	function isWorkingTreeClean():Bool
+	{
+		try
+		{
+			var process = new sys.io.Process("git", ["status", "--porcelain"]);
+			var output:String = StringTools.trim(process.stdout.readAll().toString());
+			process.close();
+
+			return output.length == 0;
+		}
+		catch (e:Dynamic)
+		{
+			return true;
+		}
+	}
+
+	function hasMergeConflictMarkers():Bool
+	{
+		return directoryContainsMarker("source", "<<<<<<< ");
+	}
+
+	function directoryContainsMarker(path:String, marker:String):Bool
+	{
+		if (!FileSystem.exists(path))
+			return false;
+
+		for (entry in FileSystem.readDirectory(path))
+		{
+			var fullPath:String = '$path/$entry';
+
+			if (FileSystem.isDirectory(fullPath))
+			{
+				if (directoryContainsMarker(fullPath, marker))
+					return true;
+
+				continue;
+			}
+
+			if (!StringTools.endsWith(entry, ".hx") && !StringTools.endsWith(entry, ".hxp"))
+				continue;
+
+			try
+			{
+				var content:String = File.getContent(fullPath);
+
+				if (content.indexOf(marker) != -1)
+					return true;
+			}
+			catch (e:Dynamic) {}
+		}
+
+		return false;
+	}
+
+	function hasMatchingGitTag(version:String):Bool
+	{
+		try
+		{
+			var process = new sys.io.Process("git", ["tag", "--list"]);
+			var output:String = process.stdout.readAll().toString();
+			process.close();
+
+			return output.indexOf(version) != -1 || output.indexOf('v$version') != -1;
+		}
+		catch (e:Dynamic)
+		{
+			return true;
+		}
+	}
+
+	function changelogMentionsVersion(version:String):Bool
+	{
+		if (!FileSystem.exists("CHANGELOG.md"))
+			return true;
+
+		try
+		{
+			var content:String = File.getContent("CHANGELOG.md");
+			return content.indexOf(version) != -1;
+		}
+		catch (e:Dynamic)
+		{
+			return true;
+		}
+	}
+
+	function hasIncompleteModFolders():Bool
+	{
+		if (!FileSystem.exists("mods") || !FileSystem.isDirectory("mods"))
+			return false;
+
+		for (entry in FileSystem.readDirectory("mods"))
+		{
+			var fullPath:String = 'mods/$entry';
+
+			if (!FileSystem.isDirectory(fullPath))
+				continue;
+
+			if (!FileSystem.exists('$fullPath/_polymod_meta.json'))
+				return true;
+		}
+
+		return false;
+	}
+
+	function maybeCreateGitTag():Void
+	{
+		if (environment != "production" || debug || envOr("SHARK_AUTO_TAG", "") != "1")
+			return;
+
+		if (hasMatchingGitTag(meta.version))
+			return;
+
+		try
+		{
+			var process = new sys.io.Process("git", ["tag", 'v${meta.version}']);
+			process.exitCode();
+			process.close();
+
+			Log.info('Created git tag v${meta.version}');
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push('SHARK_AUTO_TAG=1 but failed to create git tag v${meta.version}.');
+		}
+	}
+
+	function writeBuildInfo():Void
+	{
+		var info:Dynamic = {
+			title: meta.title,
+			version: meta.version,
+			buildNumber: meta.buildNumber,
+			commit: haxedefs.get("SHARK_COMMIT"),
+			branch: gitBranch,
+			environment: environment,
+			target: Std.string(target),
+			debug: debug,
+			features: activeFeatures,
+			generatedAt: Std.int(Date.now().getTime() / 1000)
+		};
+
+		try
+		{
+			if (!FileSystem.exists("assets/data"))
+				FileSystem.createDirectory("assets/data");
+
+			File.saveContent("assets/data/build_info.json", Json.stringify(info, null, "\t"));
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push("Failed to write assets/data/build_info.json - runtime version info will be unavailable.");
+		}
 	}
 
 	function resolveGitCommit():String
@@ -335,332 +1111,6 @@ class Project extends HXProject
 		}
 	}
 
-	function setupDevMode():Void
-	{
-		if (!isDevBranch)
-			return;
-
-		haxedefs.set("SHARK_DEV_MODE", "");
-
-		meta.title = '$APP_TITLE (dev)';
-		window.background = 0xFF2A0A0A;
-
-		Log.info('On branch "$gitBranch" - SHARK_DEV_MODE enabled (dev-only window tint, title suffix).');
-	}
-
-	function setupProductionMode():Void
-	{
-		if (!isMainBranch)
-			return;
-
-		haxedefs.set("SHARK_PRODUCTION", "");
-
-		var checklist:Array<String> = [];
-		var failures:Array<String> = [];
-
-		checkProductionItem(checklist, failures, "config.json present", sys.FileSystem.exists("assets/data/config.json"), !debug);
-		checkProductionItem(checklist, failures, "VERSION format valid", isValidVersionFormat(meta.version), !debug);
-		checkProductionItem(checklist, failures, "no leftover dev define", !haxedefs.exists("SHARK_DEV_MODE"), false);
-		checkProductionItem(checklist, failures, "working tree clean (no uncommitted changes)", isWorkingTreeClean(), false);
-		checkProductionItem(checklist, failures, "no merge conflict markers in source/", !hasMergeConflictMarkers(), true);
-		checkProductionItem(checklist, failures, 'version "${meta.version}" has a matching git tag', hasMatchingGitTag(meta.version), false);
-		checkProductionItem(checklist, failures, 'CHANGELOG.md mentions "${meta.version}"', changelogMentionsVersion(meta.version), false);
-		checkProductionItem(checklist, failures, "no broken mod folders (missing _polymod_meta.json)", !hasIncompleteModFolders(), false);
-
-		if (target == ANDROID && !debug)
-		{
-			var keystorePath:String = envOr("SHARK_KEYSTORE_PATH", "Certificates/android.keystore");
-			checkProductionItem(checklist, failures, 'Android keystore exists ($keystorePath)', sys.FileSystem.exists(keystorePath), true);
-		}
-
-		if (!debug)
-		{
-			checklist.push("[OK] release optimizations active (see setupOptimizations)");
-		}
-
-		Log.info('Production checklist (branch "$MAIN_BRANCH_NAME"):\n  ' + checklist.join("\n  "));
-
-		if (failures.length > 0 && !debug)
-		{
-			Log.error('Production build blocked - fix the following before building from $MAIN_BRANCH_NAME:\n  ' + failures.join("\n  "));
-			Sys.exit(1);
-		}
-	}
-
-	function isWorkingTreeClean():Bool
-	{
-		try
-		{
-			var process = new sys.io.Process("git", ["status", "--porcelain"]);
-			var output:String = StringTools.trim(process.stdout.readAll().toString());
-			process.close();
-
-			return output.length == 0;
-		}
-		catch (e:Dynamic)
-		{
-			return true;
-		}
-	}
-
-	function hasMergeConflictMarkers():Bool
-	{
-		return directoryContainsMarker("source", "<<<<<<< ");
-	}
-
-	function directoryContainsMarker(path:String, marker:String):Bool
-	{
-		if (!sys.FileSystem.exists(path))
-			return false;
-
-		for (entry in sys.FileSystem.readDirectory(path))
-		{
-			var fullPath:String = '$path/$entry';
-
-			if (sys.FileSystem.isDirectory(fullPath))
-			{
-				if (directoryContainsMarker(fullPath, marker))
-					return true;
-
-				continue;
-			}
-
-			if (!StringTools.endsWith(entry, ".hx") && !StringTools.endsWith(entry, ".hxp"))
-				continue;
-
-			try
-			{
-				var content:String = sys.io.File.getContent(fullPath);
-
-				if (content.indexOf(marker) != -1)
-					return true;
-			}
-			catch (e:Dynamic) {}
-		}
-
-		return false;
-	}
-
-	function hasMatchingGitTag(version:String):Bool
-	{
-		try
-		{
-			var process = new sys.io.Process("git", ["tag", "--list"]);
-			var output:String = process.stdout.readAll().toString();
-			process.close();
-
-			return output.indexOf(version) != -1 || output.indexOf('v$version') != -1;
-		}
-		catch (e:Dynamic)
-		{
-			return true;
-		}
-	}
-
-	function changelogMentionsVersion(version:String):Bool
-	{
-		if (!sys.FileSystem.exists("CHANGELOG.md"))
-			return true;
-
-		try
-		{
-			var content:String = sys.io.File.getContent("CHANGELOG.md");
-			return content.indexOf(version) != -1;
-		}
-		catch (e:Dynamic)
-		{
-			return true;
-		}
-	}
-
-	function hasIncompleteModFolders():Bool
-	{
-		if (!sys.FileSystem.exists("mods") || !sys.FileSystem.isDirectory("mods"))
-			return false;
-
-		for (entry in sys.FileSystem.readDirectory("mods"))
-		{
-			var fullPath:String = 'mods/$entry';
-
-			if (!sys.FileSystem.isDirectory(fullPath))
-				continue;
-
-			if (!sys.FileSystem.exists('$fullPath/_polymod_meta.json'))
-				return true;
-		}
-
-		return false;
-	}
-
-	function checkProductionItem(checklist:Array<String>, failures:Array<String>, label:String, passed:Bool, isBlocking:Bool):Void
-	{
-		if (passed)
-		{
-			checklist.push('[OK] $label');
-			return;
-		}
-
-		if (isBlocking)
-		{
-			checklist.push('[FAIL] $label');
-			failures.push(label);
-		}
-		else
-		{
-			checklist.push('[WARN] $label');
-		}
-	}
-
-	function setupOptimizations():Void
-	{
-		if (!debug)
-		{
-			haxeflags.push("-dce full");
-			haxeflags.push("-D no-traces");
-			haxeflags.push("-D analyzer-optimize");
-		}
-	}
-
-	function setupWindows():Void
-	{
-		window.width = 1280;
-		window.height = 720;
-		window.resizable = true;
-		window.background = 0x00111F;
-
-		architectures = [Architecture.X64];
-
-		haxedefs.set("SHARK_PLATFORM", "windows");
-
-		if (!debug)
-		{
-			haxeflags.push("-dce full");
-			haxeflags.push("-D no-traces");
-		}
-
-		cleanIfRequested("windows");
-	}
-
-	function setupAndroid():Void
-	{
-		window.orientation = LANDSCAPE;
-		window.fullscreen = true;
-		window.hardware = true;
-
-		architectures = [Architecture.ARMV7, Architecture.ARM64];
-
-		haxedefs.set("SHARK_PLATFORM", "android");
-		haxedefs.set("FLX_NO_NATIVE_CURSOR", "");
-		haxedefs.set("FLX_NO_SOUND_TRAY", "");
-
-		config.set("android.permissions", "android.permission.INTERNET android.permission.WRITE_EXTERNAL_STORAGE android.permission.READ_EXTERNAL_STORAGE android.permission.RECORD_AUDIO android.permission.READ_MEDIA_IMAGES android.permission.READ_MEDIA_AUDIO");
-		config.set("android.target-sdk-version", "35");
-		config.set("android.minimum-sdk-version", "21");
-		config.set("android.install-location", "auto");
-		config.set("android.window-soft-input-mode", "adjustResize");
-
-		if (!debug)
-		{
-			config.set("android.certificate-path", envOr("SHARK_KEYSTORE_PATH", "Certificates/android.keystore"));
-			config.set("android.certificate-password", envOr("SHARK_KEYSTORE_PASSWORD", "android"));
-			config.set("android.certificate-alias", envOr("SHARK_KEYSTORE_ALIAS", "android"));
-			config.set("android.certificate-alias-password", envOr("SHARK_KEYSTORE_ALIAS_PASSWORD", "android"));
-		}
-	}
-
-	function envOr(name:String, fallback:String):String
-	{
-		var value:String = Sys.getEnv(name);
-		return value != null && value.length > 0 ? value : fallback;
-	}
-
-	function setupIOS():Void
-	{
-		window.orientation = LANDSCAPE;
-		window.fullscreen = true;
-
-		haxedefs.set("SHARK_PLATFORM", "ios");
-		haxedefs.set("FLX_NO_NATIVE_CURSOR", "");
-		haxedefs.set("FLX_NO_SOUND_TRAY", "");
-
-		config.set("ios.deployment", "12.0");
-		config.set("ios.device", "universal");
-		config.set("ios.extension", "false");
-	}
-
-	function setupHTML5():Void
-	{
-		window.resizable = true;
-		window.allowHighDPI = true;
-		window.background = 0x00111F;
-
-		haxedefs.set("SHARK_PLATFORM", "html5");
-
-		config.set("html5.title", APP_TITLE);
-	}
-
-	function setupLinux():Void
-	{
-		window.width = 1280;
-		window.height = 720;
-		window.resizable = true;
-		window.background = 0x00111F;
-
-		architectures = [Architecture.X64];
-
-		haxedefs.set("SHARK_PLATFORM", "linux");
-
-		cleanIfRequested("linux");
-	}
-
-	function setupMac():Void
-	{
-		window.width = 1280;
-		window.height = 720;
-		window.resizable = true;
-		window.background = 0x00111F;
-
-		architectures = [Architecture.X64];
-
-		haxedefs.set("SHARK_PLATFORM", "mac");
-
-		cleanIfRequested("mac");
-	}
-
-	function cleanIfRequested(platformFolder:String):Void
-	{
-		var shouldClean:String = Sys.getEnv("SHARK_CLEAN_BUILD");
-
-		if (shouldClean == null || shouldClean != "1")
-			return;
-
-		var exportPath:String = 'export/$platformFolder';
-
-		if (sys.FileSystem.exists(exportPath))
-		{
-			Log.info('SHARK_CLEAN_BUILD=1 -> removing $exportPath before build');
-			deleteRecursive(exportPath);
-		}
-	}
-
-	function deleteRecursive(path:String):Void
-	{
-		if (!sys.FileSystem.exists(path))
-			return;
-
-		if (sys.FileSystem.isDirectory(path))
-		{
-			for (entry in sys.FileSystem.readDirectory(path))
-				deleteRecursive('$path/$entry');
-
-			sys.FileSystem.deleteDirectory(path);
-		}
-		else
-		{
-			sys.FileSystem.deleteFile(path);
-		}
-	}
-
 	function resolveBuildNumber():String
 	{
 		var path:String = ".build_number";
@@ -668,8 +1118,8 @@ class Project extends HXProject
 
 		try
 		{
-			if (sys.FileSystem.exists(path))
-				current = Std.parseInt(StringTools.trim(sys.io.File.getContent(path)));
+			if (FileSystem.exists(path))
+				current = Std.parseInt(StringTools.trim(File.getContent(path)));
 
 			if (current == null)
 				current = 0;
@@ -683,7 +1133,7 @@ class Project extends HXProject
 
 		try
 		{
-			sys.io.File.saveContent(path, Std.string(current));
+			File.saveContent(path, Std.string(current));
 		}
 		catch (e:Dynamic) {}
 
