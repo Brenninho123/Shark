@@ -1,0 +1,26 @@
+name: Ensure Shark config.json
+description: Creates a placeholder assets/data/config.json for CI builds if one is not already committed
+
+runs:
+  using: composite
+  steps:
+    - name: Ensure config.json exists
+      shell: bash
+      run: |
+        mkdir -p assets/data
+        if [ ! -f assets/data/config.json ]; then
+          cat > assets/data/config.json << 'CONFIGEOF'
+        {
+          "network": { "chatEndpoint": "", "chatApiKey": "", "imageEndpoint": "", "imageApiKey": "", "requireOnline": true },
+          "chat": { "systemPrompt": "You are Shark, a friendly aquatic AI assistant living inside a HaxeFlixel app.", "maxHistory": 40 },
+          "api": { "chatModel": "", "chatTemperature": 0.8, "chatMaxTokens": 1024 },
+          "image": { "cacheEnabled": true, "autoSaveToStorage": true },
+          "audio": { "musicVolume": 0.5, "soundVolume": 0.7 },
+          "security": { "maxRequestsPerWindow": 20 },
+          "connectivity": { "onlineCheckInterval": 20 },
+          "app": { "buildVersion": "0.1.0" },
+          "discord": { "enabled": false, "clientId": "" }
+        }
+        CONFIGEOF
+          echo "Created placeholder config.json for CI build"
+        fi
