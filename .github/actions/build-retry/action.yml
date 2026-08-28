@@ -1,0 +1,33 @@
+name: Build with retry
+description: Runs a Lime build, cleaning and retrying once if the first attempt fails
+
+inputs:
+  target:
+    required: true
+  extra-args:
+    required: false
+    default: ""
+  max-attempts:
+    required: false
+    default: "2"
+
+runs:
+  using: composite
+  steps:
+    - name: Build ${{ inputs.target }}
+      shell: bash
+      run: |
+        set -o pipefail
+        attempt=1
+        max_attempts=${{ inputs.max-attempts }}
+
+        until haxelib run lime build ${{ inputs.target }} -final ${{ inputs.extra-args }}; do
+          if [ "$attempt" -ge "$max_attempts" ]; then
+            echo "Build failed after $max_attempts attempts"
+            exit 1
+          fi
+
+          echo "Build attempt $attempt failed - cleaning and retrying..."
+          haxelib run lime clean ${{ inputs.target }} || true
+          attempt=$((attempt + 1))
+        done
