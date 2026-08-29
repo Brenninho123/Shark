@@ -5,7 +5,7 @@ import shark.active.system.BodyState;
 import shark.active.system.Head;
 import shark.audio.Audio;
 import shark.data.DataFile;
-import shark.mobile.backend.HapticStyle;
+import shark.mobile.backend.Vibration.HapticStyle;
 import shark.mobile.backend.Vibration;
 import shark.modding.Module;
 import shark.modding.api.ModVersion;
