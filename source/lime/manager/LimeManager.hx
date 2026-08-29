@@ -1,6 +1,7 @@
 package lime.manager;
 
 import flixel.FlxG;
+import haxe.Timer;
 import shark.backend.ClientPrefs;
 import shark.online.Online;
 import shark.mobile.StorageUtil;
@@ -11,6 +12,12 @@ import Main;
 #if cpp
 import hxcpp.CPP;
 #end
+
+typedef QualityChangeEntry = {
+	timestamp:Float,
+	tier:Int,
+	reason:String
+}
 
 class LimeManager
 {
@@ -41,10 +48,16 @@ class LimeManager
 	static inline var GC_CHECK_INTERVAL:Float = 10;
 	static inline var GC_MEMORY_THRESHOLD_MB:Float = 180;
 	static inline var CRITICAL_MEMORY_THRESHOLD_MB:Float = 280;
+	static inline var GC_ACTION_COOLDOWN_SECONDS:Float = 30;
+	static inline var QUALITY_CHANGE_COOLDOWN_SECONDS:Float = 5;
+	static inline var MAX_QUALITY_HISTORY:Int = 20;
 
 	static var initialized:Bool = false;
 	static var frameTimeSamples:Array<Float> = [];
 	static var gcCheckTimer:Float = 0;
+	static var lastGcActionTime:Float = -1000;
+	static var lastQualityChangeTime:Float = -1000;
+	static var qualityHistory:Array<QualityChangeEntry> = [];
 
 	public static function initialize():Void
 	{
@@ -134,13 +147,13 @@ class LimeManager
 		switch (mode)
 		{
 			case "low":
-				setQualityTier(QUALITY_LOW);
+				setQualityTier(QUALITY_LOW, "manual");
 				isManualQuality = true;
 			case "medium":
-				setQualityTier(QUALITY_MEDIUM);
+				setQualityTier(QUALITY_MEDIUM, "manual");
 				isManualQuality = true;
 			case "high":
-				setQualityTier(QUALITY_HIGH);
+				setQualityTier(QUALITY_HIGH, "manual");
 				isManualQuality = true;
 			default:
 				isManualQuality = false;
@@ -181,14 +194,20 @@ class LimeManager
 			return;
 
 		runtimeOptimizationEnabled = true;
-
 		FlxG.signals.postUpdate.add(onPostUpdate);
+
+		CrasherLog.addBreadcrumb("Runtime performance optimization enabled", "performance");
 	}
 
 	public static function disableRuntimeOptimization():Void
 	{
+		if (!runtimeOptimizationEnabled)
+			return;
+
 		runtimeOptimizationEnabled = false;
 		FlxG.signals.postUpdate.remove(onPostUpdate);
+
+		CrasherLog.addBreadcrumb("Runtime performance optimization disabled", "performance");
 	}
 
 	static function onPostUpdate():Void
@@ -226,20 +245,35 @@ class LimeManager
 		if (frameTimeSamples.length < 60)
 			return;
 
+		if (Timer.stamp() - lastQualityChangeTime < QUALITY_CHANGE_COOLDOWN_SECONDS)
+			return;
+
 		var targetFrameMs:Float = 1000 / FlxG.updateFramerate;
 
 		if (averageFrameTimeMs > targetFrameMs * 1.4 && currentQualityTier > QUALITY_LOW)
-			setQualityTier(currentQualityTier - 1);
+			setQualityTier(currentQualityTier - 1, "auto");
 		else if (averageFrameTimeMs < targetFrameMs * 0.9 && currentQualityTier < QUALITY_HIGH)
-			setQualityTier(currentQualityTier + 1);
+			setQualityTier(currentQualityTier + 1, "auto");
 	}
 
-	static function setQualityTier(tier:Int):Void
+	public static function forceQualityReevaluation():Void
+	{
+		frameTimeSamples = [];
+	}
+
+	static function setQualityTier(tier:Int, reason:String = "auto"):Void
 	{
 		if (currentQualityTier == tier)
 			return;
 
 		currentQualityTier = tier;
+		lastQualityChangeTime = Timer.stamp();
+		frameTimeSamples = [];
+
+		qualityHistory.push({timestamp: lastQualityChangeTime, tier: tier, reason: reason});
+
+		if (qualityHistory.length > MAX_QUALITY_HISTORY)
+			qualityHistory.shift();
 
 		switch (tier)
 		{
@@ -251,8 +285,33 @@ class LimeManager
 				FlxG.drawFramerate = maxFramerate;
 		}
 
+		CrasherLog.addBreadcrumb('Quality tier changed to $tier ($reason)', "performance");
+
 		if (onQualityChanged != null)
 			onQualityChanged(tier);
+	}
+
+	public static function getQualityHistory():Array<QualityChangeEntry>
+	{
+		return qualityHistory.copy();
+	}
+
+	public static function getQualityMultiplier():Float
+	{
+		if (isLowMemoryMode)
+			return 0.4;
+
+		return switch (currentQualityTier)
+		{
+			case QUALITY_LOW: 0.6;
+			case QUALITY_MEDIUM: 0.8;
+			default: 1;
+		}
+	}
+
+	public static function shouldRenderHighQualityEffects():Bool
+	{
+		return !isLowMemoryMode && currentQualityTier >= QUALITY_HIGH;
 	}
 
 	static function trackMemoryUsage(elapsed:Float):Void
@@ -270,8 +329,15 @@ class LimeManager
 
 		if (memoryUsageMB > GC_MEMORY_THRESHOLD_MB)
 		{
-			shark.backend.Paths.clearVolatileCache();
-			CPP.collectGarbage(false);
+			var now:Float = Timer.stamp();
+
+			if (now - lastGcActionTime >= GC_ACTION_COOLDOWN_SECONDS)
+			{
+				lastGcActionTime = now;
+				shark.backend.Paths.clearVolatileCache();
+				CPP.collectGarbage(false);
+				CrasherLog.addBreadcrumb('Forced cache clear + GC at ${Math.round(memoryUsageMB)}MB', "performance");
+			}
 		}
 		#end
 	}
@@ -284,7 +350,9 @@ class LimeManager
 		isLowMemoryMode = value;
 
 		if (value)
-			CrasherLog.logWarning('Entered low-memory mode at ${Math.round(memoryUsageMB)}MB');
+			CrasherLog.logWarning('Entered low-memory mode at ${Math.round(memoryUsageMB)}MB', "performance");
+		else
+			CrasherLog.addBreadcrumb('Exited low-memory mode at ${Math.round(memoryUsageMB)}MB', "performance");
 
 		if (onLowMemoryModeChanged != null)
 			onLowMemoryModeChanged(value);
@@ -313,5 +381,16 @@ class LimeManager
 		var lowMemTag:String = isLowMemoryMode ? " | LOW MEM" : "";
 
 		return 'FPS avg: ${Std.int(1000 / Math.max(averageFrameTimeMs, 1))} | Quality: $qualityName${isManualQuality ? " (manual)" : ""} | Mem: ${Std.int(memoryUsageMB)}MB$lowMemTag';
+	}
+
+	public static function getStatusSummary():String
+	{
+		var lines:Array<String> = [];
+
+		lines.push(getBuildSummary());
+		lines.push(getPerformanceSummary());
+		lines.push('Runtime optimization: ${runtimeOptimizationEnabled ? "on" : "off"}, quality changes tracked: ${qualityHistory.length}');
+
+		return lines.join("\n");
 	}
 }
