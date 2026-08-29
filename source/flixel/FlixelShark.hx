@@ -10,10 +10,13 @@ import flixel.ui.FlxButton;
 import flixel.util.FlxColor;
 import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
+import haxe.ds.WeakMap;
 import lime.manager.LimeManager;
 import shark.audio.Audio;
 import shark.backend.Language;
 import shark.backend.SharkCamera;
+import shark.mobile.backend.HapticStyle;
+import shark.mobile.backend.Vibration;
 import git.graphic.GraphicGit;
 import git.resolution.Resolution4K;
 import shark.shaders.WaterShader;
@@ -102,10 +105,21 @@ class FlixelShark
 		return label;
 	}
 
+	static function wrapWithHaptics(onClick:Void->Void):Void->Void
+	{
+		return function():Void
+		{
+			Vibration.trigger(HapticStyle.SELECTION);
+
+			if (onClick != null)
+				onClick();
+		};
+	}
+
 	public static function makeButton(x:Float, y:Float, label:String, onClick:Void->Void, ?width:Int, ?height:Int, bgColor:FlxColor = FlxColor.GRAY,
 			textColor:FlxColor = FlxColor.WHITE):FlxButton
 	{
-		var button = new FlxButton(x, y, label, onClick);
+		var button = new FlxButton(x, y, label, wrapWithHaptics(onClick));
 
 		if (width != null && height != null)
 			button.setSize(width, height);
@@ -184,6 +198,34 @@ class FlixelShark
 		return panel;
 	}
 
+	public static function createChatBubbleCard(state:FlxState, x:Float, y:Float, width:Float, height:Float, color:FlxColor,
+			tail:git.graphic.BubbleTail = LEFT, radius:Float = 12, tailSize:Float = 10, alpha:Float = 0.9):FlxSprite
+	{
+		var bubble = GraphicGit.makeChatBubbleSprite(x, y, Std.int(width), Std.int(height), color, radius, tail, tailSize, alpha);
+		state.add(bubble);
+		return bubble;
+	}
+
+	public static function createProgressBar(state:FlxState, x:Float, y:Float, width:Float, height:Float, bgColor:FlxColor, fillColor:FlxColor,
+			progress:Float = 1):{background:FlxSprite, fill:FlxSprite}
+	{
+		var background = GraphicGit.makePillSprite(x, y, Std.int(width), Std.int(height), bgColor, 1);
+		state.add(background);
+
+		var fill = GraphicGit.makePillSprite(x, y, Std.int(width), Std.int(height), fillColor, 1);
+		state.add(fill);
+
+		setProgressBarValue(fill, width, progress);
+
+		return {background: background, fill: fill};
+	}
+
+	public static function setProgressBarValue(fillSprite:FlxSprite, fullWidth:Float, progress:Float):Void
+	{
+		var clamped:Float = clampAlpha(progress);
+		fillSprite.clipRect = new openfl.geom.Rectangle(0, 0, fullWidth * clamped, fillSprite.height);
+	}
+
 	public static function makeScaledText(x:Float, y:Float, width:Float, text:String, baseSize:Int = 16, color:FlxColor = FlxColor.WHITE,
 			alignment:FlxTextAlign = LEFT):FlxText
 	{
@@ -196,7 +238,7 @@ class FlixelShark
 		return makeButton(x, y, label, onClick, Resolution4K.scaledInt(baseWidth), Resolution4K.scaledInt(baseHeight), bgColor, textColor);
 	}
 
-	static var activeWaterShaders:Array<WaterShader> = [];
+	static var activeWaterShaders:Array<{sprite:FlxSprite, shader:WaterShader}> = [];
 
 	public static function applyWaterEffect(sprite:FlxSprite, amplitude:Float = 0.01, frequency:Float = 20, tintStrength:Float = 0.15):WaterShader
 	{
@@ -206,15 +248,33 @@ class FlixelShark
 		shader.tintStrength = tintStrength;
 
 		sprite.shader = shader;
-		activeWaterShaders.push(shader);
+		activeWaterShaders.push({sprite: sprite, shader: shader});
 
 		return shader;
 	}
 
+	public static function removeWaterEffect(sprite:FlxSprite):Void
+	{
+		activeWaterShaders = activeWaterShaders.filter(function(pair) return pair.sprite != sprite);
+
+		if (sprite != null && sprite.shader != null)
+			sprite.shader = null;
+	}
+
 	public static function updateAllWaterShaders(elapsed:Float):Void
 	{
-		for (shader in activeWaterShaders)
-			shader.update(elapsed);
+		var stillActive:Array<{sprite:FlxSprite, shader:WaterShader}> = [];
+
+		for (pair in activeWaterShaders)
+		{
+			if (pair.sprite == null || !pair.sprite.exists)
+				continue;
+
+			pair.shader.update(elapsed);
+			stillActive.push(pair);
+		}
+
+		activeWaterShaders = stillActive;
 	}
 
 	public static function clearWaterShaders():Void
@@ -222,12 +282,22 @@ class FlixelShark
 		activeWaterShaders = [];
 	}
 
+	static var ambientTweens:Array<FlxTween> = [];
+
+	public static function clearAmbientTweens():Void
+	{
+		for (tween in ambientTweens)
+			if (tween != null)
+				tween.cancel();
+
+		ambientTweens = [];
+	}
+
 	public static function createIconButton(state:FlxState, x:Float, y:Float, width:Int, height:Int, color:FlxColor, onClick:Void->Void):FlxButton
 	{
-		var button = new FlxButton(x, y, "", onClick);
+		var button = new FlxButton(x, y, "", wrapWithHaptics(onClick));
 		button.setSize(width, height);
 		button.color = color;
-		button.label.text = "";
 		state.add(button);
 		return button;
 	}
@@ -249,14 +319,13 @@ class FlixelShark
 		state.add(bottom);
 	}
 
-	public static function addPlusIcon(state:FlxState, button:FlxButton, color:FlxColor = FlxColor.WHITE):Void
+	public static function addPlusIcon(state:FlxState, button:FlxButton, color:FlxColor = FlxColor.WHITE):FlxSprite
 	{
-		var cx:Float = button.x + button.width / 2;
-		var cy:Float = button.y + button.height / 2;
-		var length:Float = button.height * 0.5;
-
-		state.add(makeSprite(cx - 2, cy - length / 2, 4, Std.int(length), color));
-		state.add(makeSprite(cx - length / 2, cy - 2, Std.int(length), 4, color));
+		var size:Int = Std.int(Math.min(button.width, button.height) * 0.5);
+		var icon = new FlxSprite(button.x + (button.width - size) / 2, button.y + (button.height - size) / 2);
+		icon.pixels = GraphicGit.createPlus(size, color, 3);
+		state.add(icon);
+		return icon;
 	}
 
 	public static function addMenuIcon(state:FlxState, button:FlxButton, color:FlxColor = FlxColor.WHITE):Void
@@ -331,10 +400,12 @@ class FlixelShark
 			state.add(ray);
 			rays.push(ray);
 
-			FlxTween.tween(ray, {x: ray.x + 60}, 8 + Std.random(4), {
+			var tween = FlxTween.tween(ray, {x: ray.x + 60}, 8 + Std.random(4), {
 				ease: FlxEase.sineInOut,
 				type: PINGPONG
 			});
+
+			ambientTweens.push(tween);
 		}
 
 		return rays;
@@ -412,7 +483,7 @@ class FlixelShark
 		}
 	}
 
-	static var lastClickTimes:Map<FlxButton, Float> = new Map();
+	static var lastClickTimes:WeakMap<FlxButton, Float> = new WeakMap();
 
 	public static function makeDebouncedButton(x:Float, y:Float, label:String, onClick:Void->Void, ?width:Int, ?height:Int, bgColor:FlxColor = FlxColor.GRAY,
 			textColor:FlxColor = FlxColor.WHITE, cooldownMs:Float = -1):FlxButton
@@ -429,12 +500,19 @@ class FlixelShark
 				return;
 
 			lastClickTimes.set(button, now);
+			Vibration.trigger(HapticStyle.SELECTION);
 
 			if (onClick != null)
 				onClick();
 		};
 
-		button = makeButton(x, y, label, wrappedClick, width, height, bgColor, textColor);
+		button = new FlxButton(x, y, label, wrappedClick);
+
+		if (width != null && height != null)
+			button.setSize(width, height);
+
+		button.color = bgColor;
+		button.label.color = textColor;
 
 		return button;
 	}
@@ -452,6 +530,7 @@ class FlixelShark
 				return;
 
 			lastClickTimes.set(button, now);
+			Vibration.trigger(HapticStyle.SELECTION);
 
 			if (onClick != null)
 				onClick();
@@ -485,5 +564,10 @@ class FlixelShark
 	{
 		sprite.scale.set(1 + amount, 1 + amount);
 		flixel.tweens.FlxTween.tween(sprite.scale, {x: 1, y: 1}, duration, {ease: flixel.tweens.FlxEase.quadOut});
+	}
+
+	public static function getStatusSummary():String
+	{
+		return 'FlixelShark: ${activeWaterShaders.length} water shader(s), ${ambientTweens.length} ambient tween(s) tracked';
 	}
 }
