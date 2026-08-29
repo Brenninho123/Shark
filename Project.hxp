@@ -22,7 +22,7 @@ class Project extends HXProject
 	var isMainBranch:Bool;
 	var gitBranch:String;
 	var isGitAvailable:Bool = true;
-	var environment:String;
+	var sharkEnvironment:String;
 	var envVars:Map<String, String> = new Map();
 	var activeFeatures:Array<String> = [];
 	var buildWarnings:Array<String> = [];
@@ -40,7 +40,7 @@ class Project extends HXProject
 		isDevBranch = gitBranch == DEV_BRANCH_NAME;
 		isStagingBranch = gitBranch == STAGING_BRANCH_NAME;
 		isMainBranch = gitBranch == MAIN_BRANCH_NAME;
-		environment = resolveEnvironment();
+		sharkEnvironment = resolveEnvironment();
 
 		setupMeta();
 		setupApp();
@@ -293,7 +293,7 @@ class Project extends HXProject
 		var devTag:String = isDevBranch ? " [DEV BRANCH]" : "";
 		var elapsed:Float = Sys.time() - buildStartTime;
 
-		Log.info('Shark ${meta.version} (build ${meta.buildNumber}, commit ${haxedefs.get("SHARK_COMMIT")}, branch $gitBranch, env $environment) -> $target, ${debug ? "debug" : "release"}$devTag');
+		Log.info('Shark ${meta.version} (build ${meta.buildNumber}, commit ${haxedefs.get("SHARK_COMMIT")}, branch $gitBranch, env $sharkEnvironment) -> $target, ${debug ? "debug" : "release"}$devTag');
 
 		if (!isGitAvailable)
 			Log.warn("git was not found or this is not a git repository - commit hash, branch, and tag/working-tree checks fell back to defaults.");
@@ -447,7 +447,7 @@ class Project extends HXProject
 
 		addHaxelib("flxanimate", pinned);
 
-		if (!debug && environment != "production" && envOr("SHARK_SENTRY_DSN", "").length > 0)
+		if (!debug && sharkEnvironment != "production" && envOr("SHARK_SENTRY_DSN", "").length > 0)
 		{
 			addHaxelib("sentry", pinned);
 			activeFeatures.push("Crash reporting (Sentry)");
@@ -613,13 +613,6 @@ class Project extends HXProject
 	function setupIcon():Void
 	{
 		icons.push(new Icon("assets/images/icon.png"));
-
-		if (target == ANDROID && FileSystem.exists("assets/images/icon_adaptive_fg.png") && FileSystem.exists("assets/images/icon_adaptive_bg.png"))
-		{
-			icons.push(new Icon("assets/images/icon_adaptive_fg.png", -1, -1, "foreground"));
-			icons.push(new Icon("assets/images/icon_adaptive_bg.png", -1, -1, "background"));
-			activeFeatures.push("Android adaptive icon");
-		}
 	}
 
 	function setupDefines():Void
@@ -632,14 +625,14 @@ class Project extends HXProject
 
 		haxedefs.set("SHARK_VERSION", APP_VERSION);
 		haxedefs.set("SHARK_COMMIT", resolveGitCommit());
-		haxedefs.set("SHARK_ENVIRONMENT", environment);
+		haxedefs.set("SHARK_ENVIRONMENT", sharkEnvironment);
 		haxedefs.set("SHARK_BUILD_TIMESTAMP", Std.string(Std.int(Date.now().getTime() / 1000)));
 
 		var sentryDsn:String = envOr("SHARK_SENTRY_DSN", "");
 
 		if (sentryDsn.length > 0)
 			haxedefs.set("SHARK_SENTRY_DSN", sentryDsn);
-		else if (environment == "production")
+		else if (sharkEnvironment == "production")
 			buildWarnings.push("No SHARK_SENTRY_DSN set for a production build - crash reporting will be disabled.");
 	}
 
@@ -847,7 +840,7 @@ class Project extends HXProject
 
 	function setupDevMode():Void
 	{
-		if (environment != "dev")
+		if (sharkEnvironment != "dev")
 			return;
 
 		haxedefs.set("SHARK_DEV_MODE", "");
@@ -860,7 +853,7 @@ class Project extends HXProject
 
 	function setupStagingMode():Void
 	{
-		if (environment != "staging")
+		if (sharkEnvironment != "staging")
 			return;
 
 		haxedefs.set("SHARK_STAGING_MODE", "");
@@ -873,7 +866,7 @@ class Project extends HXProject
 
 	function setupProductionMode():Void
 	{
-		if (environment != "production")
+		if (sharkEnvironment != "production")
 			return;
 
 		haxedefs.set("SHARK_PRODUCTION", "");
@@ -1035,7 +1028,7 @@ class Project extends HXProject
 
 	function maybeCreateGitTag():Void
 	{
-		if (environment != "production" || debug || envOr("SHARK_AUTO_TAG", "") != "1")
+		if (sharkEnvironment != "production" || debug || envOr("SHARK_AUTO_TAG", "") != "1")
 			return;
 
 		if (hasMatchingGitTag(meta.version))
@@ -1063,7 +1056,7 @@ class Project extends HXProject
 			buildNumber: meta.buildNumber,
 			commit: haxedefs.get("SHARK_COMMIT"),
 			branch: gitBranch,
-			environment: environment,
+			environment: sharkEnvironment,
 			target: Std.string(target),
 			debug: debug,
 			features: activeFeatures,
