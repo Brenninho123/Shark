@@ -304,6 +304,7 @@ class Mods
 	{
 		updateFailureCounts = new Map();
 		loadAll();
+		shark.backend.Paths.onModsReloaded();
 	}
 
 	public static function setModuleEnabled(name:String, enabled:Bool):Void
