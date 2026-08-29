@@ -55,7 +55,7 @@ class DebugMenuState extends FlxState
 			{
 				label: "Chat Editor",
 				description: "Edit chat prompts, history, and live API settings.",
-				stateClassName: "shark.ui.debug.editors.ChatEditorState",
+				stateClassName: "shark.ui.debug.chat.ChatEditorState",
 				enabled: true
 			}
 		];
