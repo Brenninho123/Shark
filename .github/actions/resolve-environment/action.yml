@@ -1,0 +1,30 @@
+name: Resolve Shark environment
+description: Determines SHARK_ENV (dev/staging/production) from the manual dispatch input or the git ref and exports it for later steps
+
+inputs:
+  environment-input:
+    required: false
+    default: "auto"
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve environment
+      shell: bash
+      run: |
+        input="${{ inputs.environment-input }}"
+
+        if [ -n "$input" ] && [ "$input" != "auto" ]; then
+          resolved="$input"
+        elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          resolved="production"
+        elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          resolved="production"
+        elif [ "${{ github.ref }}" == "refs/heads/dev" ]; then
+          resolved="dev"
+        else
+          resolved="dev"
+        fi
+
+        echo "SHARK_ENV=$resolved" >> "$GITHUB_ENV"
+        echo "Resolved SHARK_ENV=$resolved"
