@@ -60,6 +60,7 @@ typedef SettingsData = {
 	vibrationEnabled:Bool,
 	vibrationIntensity:Float,
 	reducedMotion:Bool,
+	devModeEnabled:Bool,
 	languageOverride:String
 }
 
@@ -194,6 +195,7 @@ class Main extends Sprite
 			vibrationEnabled: true,
 			vibrationIntensity: 1,
 			reducedMotion: false,
+			devModeEnabled: false,
 			languageOverride: ""
 		};
 	}
@@ -238,6 +240,7 @@ class Main extends Sprite
 	{
 		CrasherLog.repeatedCrashWindowSeconds = CRASH_LOOP_WINDOW_SECONDS;
 		CrasherLog.repeatedCrashThreshold = CRASH_LOOP_LIMIT;
+		CrasherLog.minLogSeverity = isDevModeActive() ? "trace" : "warning";
 		CrasherLog.setContext("language", systemLanguage);
 
 		CrasherLog.onRepeatedCrash = function(category:String, count:Int):Void
@@ -247,6 +250,30 @@ class Main extends Sprite
 		};
 
 		CrasherLog.remoteReporter = reportCrashRemotely;
+	}
+
+	public static function isDevModeEnabled():Bool
+	{
+		return settings != null && settings.data.devModeEnabled;
+	}
+
+	public static function isDevModeActive():Bool
+	{
+		#if SHARK_DEV_MODE
+		return true;
+		#else
+		return isDevModeEnabled();
+		#end
+	}
+
+	public static function toggleDevMode():Bool
+	{
+		var newValue:Bool = !isDevModeEnabled();
+
+		settings.update(function(d:SettingsData):Void d.devModeEnabled = newValue);
+		CrasherLog.minLogSeverity = isDevModeActive() ? "trace" : "warning";
+
+		return newValue;
 	}
 
 	function reportCrashRemotely(entry:CrashEntry):Void
