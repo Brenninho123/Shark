@@ -265,13 +265,25 @@ class Project extends HXProject
 		}
 	}
 
+	function formatDecimal(value:Float, decimals:Int):String
+	{
+		var factor:Float = Math.pow(10, decimals);
+		var rounded:Float = Math.round(value * factor) / factor;
+		var text:String = Std.string(rounded);
+
+		if (text.indexOf(".") == -1)
+			text += ".0";
+
+		return text;
+	}
+
 	function formatBytes(bytes:Int):String
 	{
 		if (bytes >= 1000000)
-			return (bytes / 1000000).toStringPrecision(2) + " MB";
+			return formatDecimal(bytes / 1000000, 2) + " MB";
 
 		if (bytes >= 1000)
-			return (bytes / 1000).toStringPrecision(2) + " KB";
+			return formatDecimal(bytes / 1000, 2) + " KB";
 
 		return '$bytes B';
 	}
@@ -297,7 +309,7 @@ class Project extends HXProject
 				Log.warn('  - $warning');
 		}
 
-		Log.info('Project.hxp setup finished in ${elapsed.toStringPrecision(3)}s');
+		Log.info('Project.hxp setup finished in ${formatDecimal(elapsed, 3)}s');
 	}
 
 	function setupMeta():Void
