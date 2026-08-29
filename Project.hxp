@@ -27,6 +27,7 @@ class Project extends HXProject
 	var activeFeatures:Array<String> = [];
 	var buildWarnings:Array<String> = [];
 	var buildStartTime:Float;
+	var buildPhases:Array<{phase:String, ms:Float}> = [];
 
 	public function new()
 	{
@@ -34,29 +35,39 @@ class Project extends HXProject
 
 		buildStartTime = Sys.time();
 
+		#if (haxe_ver < 4.3)
+		Log.warn('Haxe version is older than 4.3 - this project is built and tested against 4.3.7.');
+		#end
+
 		loadEnvFile();
+		recordBuildPhase("env_loaded");
 
 		gitBranch = resolveGitBranch();
 		isDevBranch = gitBranch == DEV_BRANCH_NAME;
 		isStagingBranch = gitBranch == STAGING_BRANCH_NAME;
 		isMainBranch = gitBranch == MAIN_BRANCH_NAME;
 		sharkEnvironment = resolveEnvironment();
+		recordBuildPhase("environment_resolved");
 
 		setupMeta();
 		setupApp();
 		setupWindow();
 		setupSource();
 		setupHaxelibs();
+		recordBuildPhase("haxelibs_configured");
+
 		setupAssets();
 		setupIcon();
 		setupLocalization();
 		setupFeatureFlags();
 		setupDefines();
 		setupOptimizations();
+		recordBuildPhase("assets_and_defines_configured");
 
 		checkConfigJson();
 		checkDependencyIntegrity();
 		validateAssetIntegrity();
+		recordBuildPhase("validation_complete");
 
 		switch (target)
 		{
@@ -76,14 +87,23 @@ class Project extends HXProject
 				buildWarnings.push('Unrecognized target "$target" - no platform-specific setup applied.');
 		}
 
+		recordBuildPhase("platform_configured");
+
 		setupDevMode();
 		setupStagingMode();
 		setupProductionMode();
+		recordBuildPhase("environment_mode_configured");
 
 		writeBuildInfo();
+		writeBuildReport();
 		maybeCreateGitTag();
 
 		logBuildSummary();
+	}
+
+	function recordBuildPhase(phase:String):Void
+	{
+		buildPhases.push({phase: phase, ms: (Sys.time() - buildStartTime) * 1000});
 	}
 
 	function loadEnvFile():Void
@@ -167,20 +187,38 @@ class Project extends HXProject
 
 		if (!FileSystem.exists(path))
 		{
-			buildWarnings.push('$path not found - run `haxe --run setup/application/Setup.hx` first, or the chat/image API will not be configured.');
+			buildWarnings.push('$path not found - copy the placeholder config (see .github/actions/ensure-config) or the chat/image API will not be configured.');
 			return;
 		}
 
 		try
 		{
 			var parsed:Dynamic = Json.parse(File.getContent(path));
-			var requiredKeys:Array<String> = ["chatApiEndpoint", "imageApiEndpoint", "apiTimeoutSeconds"];
+			var knownSections:Array<String> = ["network", "chat", "api", "image", "audio", "security", "connectivity", "app", "discord", "platforms"];
+			var unknownSections:Array<String> = [];
 
-			for (key in requiredKeys)
+			for (field in Reflect.fields(parsed))
+				if (knownSections.indexOf(field) == -1)
+					unknownSections.push(field);
+
+			if (unknownSections.length > 0)
+				buildWarnings.push('$path has unrecognized top-level section(s): ${unknownSections.join(", ")} - check for typos.');
+
+			if (!Reflect.hasField(parsed, "network"))
 			{
-				if (!Reflect.hasField(parsed, key))
-					buildWarnings.push('$path is missing required field "$key".');
+				buildWarnings.push('$path is missing the "network" section entirely - chat/image API will not be configured.');
+				return;
 			}
+
+			var network:Dynamic = Reflect.field(parsed, "network");
+			var requiredNetworkFields:Array<String> = ["chatEndpoint", "chatApiKey", "imageEndpoint", "imageApiKey", "requireOnline"];
+
+			for (field in requiredNetworkFields)
+				if (!Reflect.hasField(network, field))
+					buildWarnings.push('$path "network" section is missing field "$field".');
+
+			if (!debug && Reflect.hasField(network, "chatEndpoint") && StringTools.trim(Std.string(Reflect.field(network, "chatEndpoint"))).length == 0)
+				buildWarnings.push('$path network.chatEndpoint is empty in a release build - chat will stay unconfigured until the user sets it, or requireOnline blocks it.');
 		}
 		catch (e:Dynamic)
 		{
@@ -188,9 +226,33 @@ class Project extends HXProject
 		}
 	}
 
+	function configHasChatEndpoint():Bool
+	{
+		var path:String = "assets/data/config.json";
+
+		if (!FileSystem.exists(path))
+			return false;
+
+		try
+		{
+			var parsed:Dynamic = Json.parse(File.getContent(path));
+			var network:Dynamic = Reflect.field(parsed, "network");
+
+			if (network == null)
+				return false;
+
+			var endpoint:Dynamic = Reflect.field(network, "chatEndpoint");
+			return endpoint != null && StringTools.trim(Std.string(endpoint)).length > 0;
+		}
+		catch (e:Dynamic)
+		{
+			return false;
+		}
+	}
+
 	function checkDependencyIntegrity():Void
 	{
-		var required:Array<String> = ["lime", "openfl", "flixel", "flixel-addons", "hscript", "polymod"];
+		var required:Array<String> = ["lime", "openfl", "flixel", "flixel-addons", "hscript", "polymod", "haxeui-core", "haxeui-flixel"];
 		var missing:Array<String> = [];
 
 		try
@@ -546,9 +608,43 @@ class Project extends HXProject
 		haxedefs.set("SHARK_HAS_BUNDLED_MODS", "");
 
 		setupPolymodDefines();
+		validateBundledMods(entries);
 
 		activeFeatures.push('Bundled mods ($scriptModCount script, $folderModCount folder)');
 		Log.info('Bundled mods folder detected: $scriptModCount .hxs script mod(s), $folderModCount Polymod folder mod(s) - packaging with the app.');
+	}
+
+	function validateBundledMods(entries:Array<String>):Void
+	{
+		for (entry in entries)
+		{
+			var fullPath:String = 'mods/$entry';
+
+			if (!FileSystem.isDirectory(fullPath))
+				continue;
+
+			var manifestPath:String = '$fullPath/modpack.json';
+
+			if (!FileSystem.exists(manifestPath))
+			{
+				buildWarnings.push('Bundled mod folder "$entry" has no modpack.json - it will not be detected as a mod.');
+				continue;
+			}
+
+			try
+			{
+				var manifest:Dynamic = Json.parse(File.getContent(manifestPath));
+				var requiredFields:Array<String> = ["title", "description", "modVersion"];
+
+				for (field in requiredFields)
+					if (!Reflect.hasField(manifest, field) || Reflect.field(manifest, field) == null)
+						buildWarnings.push('Bundled mod "$entry" modpack.json is missing required field "$field".');
+			}
+			catch (e:Dynamic)
+			{
+				buildWarnings.push('Bundled mod "$entry" has an invalid modpack.json (not valid JSON).');
+			}
+		}
 	}
 
 	function setupPolymodDefines():Void
@@ -883,6 +979,7 @@ class Project extends HXProject
 		checkProductionItem(checklist, failures, 'CHANGELOG.md mentions "${meta.version}"', changelogMentionsVersion(meta.version), false);
 		checkProductionItem(checklist, failures, "no broken mod folders (missing _polymod_meta.json)", !hasIncompleteModFolders(), false);
 		checkProductionItem(checklist, failures, "no unresolved setup warnings", buildWarnings.length == 0, false);
+		checkProductionItem(checklist, failures, "config.json network.chatEndpoint is set", configHasChatEndpoint(), false);
 
 		if (target == ANDROID && !debug)
 		{
@@ -1060,6 +1157,7 @@ class Project extends HXProject
 			target: Std.string(target),
 			debug: debug,
 			features: activeFeatures,
+			buildPhases: buildPhases,
 			generatedAt: Std.int(Date.now().getTime() / 1000)
 		};
 
@@ -1074,6 +1172,50 @@ class Project extends HXProject
 		{
 			buildWarnings.push("Failed to write assets/data/build_info.json - runtime version info will be unavailable.");
 		}
+	}
+
+	function writeBuildReport():Void
+	{
+		var lines:Array<String> = [];
+
+		lines.push('Shark build report - ${Date.now().toString()}');
+		lines.push('Version: ${meta.version} (build ${meta.buildNumber})');
+		lines.push('Branch: $gitBranch, environment: $sharkEnvironment, target: $target, mode: ${debug ? "debug" : "release"}');
+		lines.push("");
+		lines.push("Build phases:");
+
+		for (phase in buildPhases)
+			lines.push('  ${phase.phase}: ${formatDecimal(phase.ms, 1)}ms');
+
+		lines.push("");
+
+		if (activeFeatures.length > 0)
+		{
+			lines.push("Active features:");
+
+			for (feature in activeFeatures)
+				lines.push('  - $feature');
+
+			lines.push("");
+		}
+
+		if (buildWarnings.length > 0)
+		{
+			lines.push('Warnings (${buildWarnings.length}):');
+
+			for (warning in buildWarnings)
+				lines.push('  - $warning');
+		}
+		else
+		{
+			lines.push("No warnings.");
+		}
+
+		try
+		{
+			File.saveContent("build_report.log", lines.join("\n"));
+		}
+		catch (e:Dynamic) {}
 	}
 
 	function resolveGitCommit():String
