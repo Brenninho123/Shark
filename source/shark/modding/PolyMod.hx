@@ -202,6 +202,8 @@ class PolyMod
 			initialize(lastSuccessfulModIds);
 		}
 		#end
+
+		shark.backend.Paths.onModsReloaded();
 	}
 
 	public static function hasLastGoodState():Bool
