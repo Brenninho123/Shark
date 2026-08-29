@@ -4,6 +4,9 @@ import flixel.FlxG;
 import flixel.FlxGame;
 import flixel.text.FlxText;
 import flixel.util.FlxColor;
+import haxe.Http;
+import haxe.Json;
+import haxe.Timer;
 import lime.LimeShark;
 import lime.manager.LimeManager;
 import lime.ui.KeyCode;
@@ -21,12 +24,16 @@ import shark.audio.Audio;
 import shark.backend.ClientPrefs;
 import shark.backend.Language;
 import shark.backend.Paths;
+import shark.data.DataFile;
 import shark.functions.ChatEngine;
 import shark.functions.ImageCreator;
 import shark.menus.MainMenuState;
+import shark.mobile.backend.HapticStyle;
+import shark.mobile.backend.Vibration;
 import shark.online.Online;
 import shark.online.User;
 import shark.online.manager.Internet;
+import shark.ui.debug.CrashEntry;
 import shark.ui.debug.CrasherLog;
 import shark.ui.debug.DebugDisplay;
 import shark.ui.discord.Discord;
@@ -44,6 +51,18 @@ import shark.api.newgrounds.NewClient;
 import shark.world.Country;
 import shark.Native;
 
+typedef SettingsData = {
+	hasCompletedFirstRun:Bool,
+	muted:Bool,
+	musicVolume:Float,
+	soundVolume:Float,
+	showFpsCounter:Bool,
+	vibrationEnabled:Bool,
+	vibrationIntensity:Float,
+	reducedMotion:Bool,
+	languageOverride:String
+}
+
 class Main extends Sprite
 {
 	public static var lastError:String = "";
@@ -53,14 +72,20 @@ class Main extends Sprite
 	public static var systemLanguage(default, null):String = "en";
 
 	public static var instance(default, null):Main;
+	public static var settings(default, null):DataFile<SettingsData>;
 
 	static inline var SAVE_NAME:String = "shark_save";
 	static inline var CRASH_LOOP_LIMIT:Int = 5;
 	static inline var CRASH_LOOP_WINDOW_SECONDS:Float = 30;
 	static inline var MAX_LOGGED_MESSAGE_LENGTH:Int = 500;
 
+	static var wasFirstLaunch:Bool = false;
+	static var bootPhases:Array<{phase:String, ms:Float}> = [];
+	static var bootStartTime:Float = -1;
+
 	var debugOverlay:DebugDisplay;
 	var debugOverlayVisible:Bool = false;
+	var diagnosticsEndpoint:String = "";
 
 	public function new()
 	{
@@ -84,23 +109,29 @@ class Main extends Sprite
 
 	function init():Void
 	{
+		recordBootPhase("init_start");
+
 		setupStage();
 		setupErrorHandling();
 		setupLifecycle();
 		setupInput();
 		setupLocale();
-		setupSave();
+		setupCrashReporting();
+		setupSettings();
+		recordBootPhase("settings_ready");
 
 		ClientPrefs.initialize();
 		Language.initialize();
 		Audio.initialize();
 		Resolution4K.initialize();
 		User.initialize();
+		recordBootPhase("core_systems_ready");
 
 		setupNetworkConfig();
 		setupSecurity();
 		setupConnectivity();
 		setupHeadSignals();
+		recordBootPhase("network_config_ready");
 
 		MainCpp.recordCheckpoint("pre_lime_shark");
 		LimeShark.initialize();
@@ -121,7 +152,10 @@ class Main extends Sprite
 		}
 		#end
 
+		recordBootPhase("mods_ready");
+
 		setupGame();
+		setupStateTracking();
 		MainCpp.recordCheckpoint("flixel_game_ready");
 
 		setupTouch();
@@ -145,7 +179,104 @@ class Main extends Sprite
 		addChild(new FPS(10, 10, 0xFFFFFF));
 		#end
 
+		recordBootPhase("init_complete");
 		fireReady();
+	}
+
+	static function buildDefaultSettings():SettingsData
+	{
+		return {
+			hasCompletedFirstRun: false,
+			muted: false,
+			musicVolume: 0.5,
+			soundVolume: 0.7,
+			showFpsCounter: false,
+			vibrationEnabled: true,
+			vibrationIntensity: 1,
+			reducedMotion: false,
+			languageOverride: ""
+		};
+	}
+
+	function setupSettings():Void
+	{
+		settings = new DataFile<SettingsData>("settings", buildDefaultSettings());
+		settings.validator = validateSettingsData;
+
+		settings.onCorruptionRecovered = function(reason:String):Void
+		{
+			CrasherLog.logWarning('Settings file recovered: $reason', "settings");
+		};
+
+		settings.load();
+		wasFirstLaunch = !settings.data.hasCompletedFirstRun;
+
+		Audio.setMuted(settings.data.muted);
+		Audio.musicVolume = settings.data.musicVolume;
+		Audio.soundVolume = settings.data.soundVolume;
+
+		Vibration.setEnabled(settings.data.vibrationEnabled);
+		Vibration.setGlobalIntensity(settings.data.vibrationIntensity);
+		Vibration.setReducedMotionProvider(isReducedMotionEnabled);
+
+		debugOverlayVisible = settings.data.showFpsCounter;
+	}
+
+	static function isReducedMotionEnabled():Bool
+	{
+		return settings != null && settings.data.reducedMotion;
+	}
+
+	static function validateSettingsData(data:SettingsData):Bool
+	{
+		return data.musicVolume >= 0 && data.musicVolume <= 1
+			&& data.soundVolume >= 0 && data.soundVolume <= 1
+			&& data.vibrationIntensity >= 0 && data.vibrationIntensity <= 1;
+	}
+
+	function setupCrashReporting():Void
+	{
+		CrasherLog.repeatedCrashWindowSeconds = CRASH_LOOP_WINDOW_SECONDS;
+		CrasherLog.repeatedCrashThreshold = CRASH_LOOP_LIMIT;
+		CrasherLog.setContext("language", systemLanguage);
+
+		CrasherLog.onRepeatedCrash = function(category:String, count:Int):Void
+		{
+			if (!isSafeMode)
+				enterSafeMode();
+		};
+
+		CrasherLog.remoteReporter = reportCrashRemotely;
+	}
+
+	function reportCrashRemotely(entry:CrashEntry):Void
+	{
+		if (diagnosticsEndpoint == null || diagnosticsEndpoint.length == 0)
+			return;
+
+		var endpoint:String = diagnosticsEndpoint;
+
+		Online.enqueueRetry('crash-report-${entry.timestamp}', function():Void
+		{
+			try
+			{
+				var http:Http = new Http(endpoint);
+				http.setHeader("Content-Type", "application/json");
+				http.setPostData(Json.stringify(entry));
+				http.request(true);
+			}
+			catch (e:Dynamic) {}
+		});
+	}
+
+	function recordBootPhase(phase:String):Void
+	{
+		var now:Float = Timer.stamp();
+
+		if (bootStartTime < 0)
+			bootStartTime = now;
+
+		bootPhases.push({phase: phase, ms: (now - bootStartTime) * 1000});
 	}
 
 	function extractBundledMods():Void
@@ -245,17 +376,6 @@ class Main extends Sprite
 		systemLanguage = raw != null && raw.length >= 2 ? raw.substr(0, 2).toLowerCase() : "en";
 	}
 
-	function setupSave():Void
-	{
-		FlxG.save.bind(SAVE_NAME);
-
-		if (FlxG.save.data.muted != null)
-			Audio.setMuted(FlxG.save.data.muted);
-
-		if (FlxG.save.data.musicVolume != null)
-			Audio.musicVolume = FlxG.save.data.musicVolume;
-	}
-
 	public static var isNetworkConfigLoaded(default, null):Bool = false;
 
 	function setupNetworkConfig():Void
@@ -279,6 +399,9 @@ class Main extends Sprite
 		applyDiscordSection(parsed.discord);
 		applyPlatformsSection(parsed.platforms);
 		validateConfigSchema(parsed);
+
+		if (wasFirstLaunch)
+			settings.update(function(d:SettingsData):Void d.hasCompletedFirstRun = true);
 
 		isNetworkConfigLoaded = true;
 	}
@@ -324,6 +447,9 @@ class Main extends Sprite
 			ChatEngine.requireOnline = section.requireOnline;
 			ImageCreator.requireOnline = section.requireOnline;
 		}
+
+		if (section.diagnosticsEndpoint != null)
+			diagnosticsEndpoint = section.diagnosticsEndpoint;
 	}
 
 	function applyChatSection(section:Dynamic):Void
@@ -391,17 +517,24 @@ class Main extends Sprite
 
 	function applyAudioSection(section:Dynamic):Void
 	{
-		if (section == null)
+		if (section == null || !wasFirstLaunch)
 			return;
 
-		if (section.musicVolume != null && FlxG.save.data.musicVolume == null)
-			Audio.musicVolume = section.musicVolume;
+		settings.update(function(d:SettingsData):Void
+		{
+			if (section.musicVolume != null)
+				d.musicVolume = section.musicVolume;
 
-		if (section.soundVolume != null)
-			Audio.soundVolume = section.soundVolume;
+			if (section.soundVolume != null)
+				d.soundVolume = section.soundVolume;
 
-		if (section.startMuted != null && FlxG.save.data.muted == null)
-			Audio.setMuted(section.startMuted);
+			if (section.startMuted != null)
+				d.muted = section.startMuted;
+		});
+
+		Audio.setMuted(settings.data.muted);
+		Audio.musicVolume = settings.data.musicVolume;
+		Audio.soundVolume = settings.data.soundVolume;
 	}
 
 	function applySecuritySection(section:Dynamic):Void
@@ -468,9 +601,7 @@ class Main extends Sprite
 		{
 			Discord.initialize(discordClientId);
 			Discord.update("In the main menu", "Just started up");
-
 			FlxG.signals.postUpdate.add(Discord.runCallbacks);
-			FlxG.signals.postStateSwitch.add(onDiscordStateSwitch);
 		}
 		catch (e:Dynamic)
 		{
@@ -555,15 +686,28 @@ class Main extends Sprite
 			Country.detect();
 	}
 
-	function onDiscordStateSwitch():Void
+	function setupStateTracking():Void
 	{
-		#if cpp
-		if (!discordEnabled || FlxG.state == null)
+		FlxG.signals.postStateSwitch.add(onStateSwitched);
+	}
+
+	function onStateSwitched():Void
+	{
+		if (FlxG.state == null)
 			return;
 
 		var stateName:String = Type.getClassName(Type.getClass(FlxG.state));
+		CrasherLog.addBreadcrumb('Switched to $stateName', "navigation");
 
-		var label:String = switch (stateName)
+		#if cpp
+		if (discordEnabled)
+			Discord.update(stateLabelFor(stateName), "");
+		#end
+	}
+
+	function stateLabelFor(stateName:String):String
+	{
+		return switch (stateName)
 		{
 			case "shark.menus.MainMenuState": "Chatting with Shark";
 			case "shark.active.GameState": "Choosing a mini-game";
@@ -572,10 +716,7 @@ class Main extends Sprite
 			case "shark.active.games.DeepDiveState": "Playing Deep Dive";
 			case "shark.menus.options.OptionsState": "Adjusting settings";
 			default: "Exploring the app";
-		};
-
-		Discord.update(label, "");
-		#end
+		}
 	}
 
 	function setupSecurity():Void
@@ -600,6 +741,23 @@ class Main extends Sprite
 	function setupConnectivity():Void
 	{
 		Internet.initialize();
+		Online.start();
+
+		if (ChatEngine.endpoint != null && ChatEngine.endpoint.length > 0)
+			Online.configureApi(ChatEngine.endpoint);
+
+		Online.addStatusListener(onConnectivityChanged);
+		Online.addApiStatusListener(onApiStatusChanged);
+	}
+
+	function onConnectivityChanged(isOnline:Bool):Void
+	{
+		CrasherLog.addBreadcrumb(isOnline ? "Back online" : "Went offline", "connectivity");
+	}
+
+	function onApiStatusChanged(isOnline:Bool):Void
+	{
+		CrasherLog.addBreadcrumb(isOnline ? "Shark API reachable" : "Shark API unreachable", "connectivity");
 	}
 
 	function setupHeadSignals():Void
@@ -633,7 +791,6 @@ class Main extends Sprite
 	function setupDebugOverlay():Void
 	{
 		debugOverlay = new DebugDisplay(10, 30);
-		debugOverlayVisible = FlxG.save.data.showFpsCounter == true;
 		debugOverlay.visible = debugOverlayVisible;
 
 		if (FlxG.stage != null)
@@ -663,8 +820,8 @@ class Main extends Sprite
 		debugOverlayVisible = !debugOverlayVisible;
 		debugOverlay.visible = debugOverlayVisible;
 
-		FlxG.save.data.showFpsCounter = debugOverlayVisible;
-		FlxG.save.flush();
+		settings.update(function(d:SettingsData):Void d.showFpsCounter = debugOverlayVisible);
+		Vibration.trigger(HapticStyle.SELECTION);
 
 		return debugOverlayVisible;
 	}
@@ -683,11 +840,6 @@ class Main extends Sprite
 	{
 		return instance != null ? instance.isDebugOverlayVisible() : false;
 	}
-
-	// -----------------------------------------------------------------
-	// Public Shark API - the app's own control/diagnostics surface,
-	// safe to call from other systems, screens, or mods.
-	// -----------------------------------------------------------------
 
 	public static var onReady:Array<Void->Void> = [];
 	public static var onPause:Array<Void->Void> = [];
@@ -765,6 +917,50 @@ class Main extends Sprite
 		return Native.getFullReport();
 	}
 
+	public static function getFullDiagnostics():String
+	{
+		var sections:Array<String> = [
+			"-- App --",
+			getAppSummary(),
+			"-- Boot --",
+			getBootReport(),
+			"-- Connectivity --",
+			Online.getSummary(),
+			"-- Vibration --",
+			Vibration.getStatusSummary(),
+			"-- Crash log --",
+			CrasherLog.getStatusSummary(),
+			"-- Settings --",
+			settings != null ? settings.getStatusSummary() : "not loaded",
+			"-- Native --",
+			Native.getFullReport()
+		];
+
+		return sections.join("\n\n");
+	}
+
+	public static function getBootReport():String
+	{
+		var lines:Array<String> = [];
+
+		for (entry in bootPhases)
+			lines.push('${entry.phase}: ${Std.int(entry.ms)}ms');
+
+		return lines.join("\n");
+	}
+
+	public static function getBuildInfo():Dynamic
+	{
+		try
+		{
+			return Paths.getJson("build_info");
+		}
+		catch (e:Dynamic)
+		{
+			return null;
+		}
+	}
+
 	public static function getAppSummary():String
 	{
 		var lines:Array<String> = [
@@ -775,7 +971,22 @@ class Main extends Sprite
 			CrasherLog.getCategorySummary()
 		];
 
+		var buildInfo:Dynamic = getBuildInfo();
+
+		if (buildInfo != null)
+			lines.push('Build: ${Reflect.field(buildInfo, "version")} (${Reflect.field(buildInfo, "commit")}) [${Reflect.field(buildInfo, "environment")}]');
+
 		return lines.join(" | ");
+	}
+
+	public static function isFirstLaunch():Bool
+	{
+		return wasFirstLaunch;
+	}
+
+	public static function getSettings():DataFile<SettingsData>
+	{
+		return settings;
 	}
 
 	public static function isReady():Bool
@@ -821,6 +1032,7 @@ class Main extends Sprite
 		if (FlxG.sound != null)
 			FlxG.sound.pause();
 
+		Vibration.cancel();
 		flushSave();
 		firePause();
 	}
@@ -839,9 +1051,15 @@ class Main extends Sprite
 
 	function flushSave():Void
 	{
-		FlxG.save.data.muted = Audio.isMuted;
-		FlxG.save.data.musicVolume = Audio.musicVolume;
-		FlxG.save.flush();
+		settings.update(function(d:SettingsData):Void
+		{
+			d.muted = Audio.isMuted;
+			d.musicVolume = Audio.musicVolume;
+			d.soundVolume = Audio.soundVolume;
+		});
+
+		settings.forceSave();
+		CrasherLog.flush();
 	}
 
 	function onKeyDown(e:KeyboardEvent):Void
@@ -869,6 +1087,8 @@ class Main extends Sprite
 		if (Std.isOfType(FlxG.state, MainMenuState))
 			return;
 
+		Vibration.menuSelect();
+		CrasherLog.addBreadcrumb("Back button pressed", "input");
 		FlxG.switchState(new MainMenuState());
 	}
 
@@ -889,9 +1109,6 @@ class Main extends Sprite
 			lastError = lastError.substr(0, MAX_LOGGED_MESSAGE_LENGTH);
 
 		CrasherLog.logError(lastError);
-
-		if (CrasherLog.isCrashingRepeatedly(CRASH_LOOP_WINDOW_SECONDS, CRASH_LOOP_LIMIT) && !isSafeMode)
-			enterSafeMode();
 	}
 
 	function enterSafeMode():Void
@@ -901,7 +1118,10 @@ class Main extends Sprite
 		Online.stop();
 		LimeManager.disableRuntimeOptimization();
 		Audio.stopMusic(0);
+		Vibration.cancel();
+		Vibration.setEnabled(false);
 
+		CrasherLog.setContext("safeMode", "true");
 		CrasherLog.logSecurity("Entered safe mode after repeated crashes");
 
 		if (FlxG.state != null && !Std.isOfType(FlxG.state, MainMenuState))
