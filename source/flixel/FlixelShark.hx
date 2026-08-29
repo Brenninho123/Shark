@@ -15,7 +15,7 @@ import lime.manager.LimeManager;
 import shark.audio.Audio;
 import shark.backend.Language;
 import shark.backend.SharkCamera;
-import shark.mobile.backend.HapticStyle;
+import shark.mobile.backend.Vibration.HapticStyle;
 import shark.mobile.backend.Vibration;
 import git.graphic.GraphicGit;
 import git.resolution.Resolution4K;
@@ -199,7 +199,7 @@ class FlixelShark
 	}
 
 	public static function createChatBubbleCard(state:FlxState, x:Float, y:Float, width:Float, height:Float, color:FlxColor,
-			tail:git.graphic.BubbleTail = LEFT, radius:Float = 12, tailSize:Float = 10, alpha:Float = 0.9):FlxSprite
+			tail:git.graphic.GraphicGit.BubbleTail = LEFT, radius:Float = 12, tailSize:Float = 10, alpha:Float = 0.9):FlxSprite
 	{
 		var bubble = GraphicGit.makeChatBubbleSprite(x, y, Std.int(width), Std.int(height), color, radius, tail, tailSize, alpha);
 		state.add(bubble);
