@@ -6,11 +6,15 @@ import flixel.FlxSprite;
 import flixel.group.FlxSpriteGroup;
 import flixel.text.FlxText;
 import flixel.ui.FlxButton;
-import flixel.addons.ui.FlxInputText;
 import flixel.util.FlxColor;
 import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
 import openfl.display.BitmapData;
+import haxe.ui.Toolkit;
+import haxe.ui.core.Component;
+import haxe.ui.core.Screen;
+import haxe.ui.components.Button as UIButton;
+import haxe.ui.components.TextField as UITextField;
 import flixel.FlixelShark;
 import git.graphic.GraphicGit;
 import git.performance.Boost;
@@ -24,10 +28,13 @@ import shark.backend.Language;
 import shark.backend.Paths;
 import shark.functions.ChatEngine;
 import shark.menus.options.OptionsState;
+import shark.mobile.backend.HapticStyle;
+import shark.mobile.backend.Vibration;
 import shark.online.Online;
 import shark.online.manager.Internet;
 import shark.mobile.ui.AndroidKeyboard;
 import shark.shaders.WaterShader;
+import shark.ui.debug.menu.DebugMenuState;
 import lime.manager.LimeManager;
 
 import Main;
@@ -46,14 +53,21 @@ class MainMenuState extends FlxState
 	static inline var COLOR_OFFLINE:FlxColor = 0xFFF87171;
 	static inline var COLOR_DANGER:FlxColor = 0xFFF87171;
 
-	var inputField:FlxInputText;
+	static var toolkitInitialized:Bool = false;
+
+	var inputField:UITextField;
 	var historyText:FlxText;
 	var titleText:FlxText;
-	var sendButton:FlxButton;
+	var sendButton:UIButton;
 	var muteButton:FlxButton;
 	var newChatButton:FlxButton;
 	var optionsButton:FlxButton;
 	var boostButton:FlxButton;
+
+	#if SHARK_DEV_MODE
+	var debugButton:UIButton;
+	#end
+
 	var inputFieldBaseY:Float;
 	var sendButtonBaseY:Float;
 	var muteIcon:FlxSpriteGroup;
@@ -67,11 +81,13 @@ class MainMenuState extends FlxState
 	var kelpBlades:Array<{sprite:FlxSprite, offset:Float, speed:Float}> = [];
 	var bubbles:Array<FlxSprite> = [];
 	var imageSprites:Array<FlxSprite> = [];
+	var uiComponents:Array<Component> = [];
 
 	var conversation:Array<String> = [];
 	var isMobile:Bool;
 	var thinkingElapsed:Float = 0;
 	var latencyRefreshTimer:Float = 0;
+	var historyPad:Int;
 
 	static inline var LATENCY_REFRESH_INTERVAL:Float = 15;
 
@@ -81,6 +97,8 @@ class MainMenuState extends FlxState
 
 		isMobile = FlxG.onMobile;
 		bgColor = COLOR_ABYSS;
+
+		ensureToolkit();
 
 		FlixelShark.createDepthGradient(this, [COLOR_ABYSS, COLOR_DEEP, COLOR_MID]);
 		createLightRays();
@@ -99,7 +117,7 @@ class MainMenuState extends FlxState
 		thinkingText = FlixelShark.makeText(0, titleText.y + titleText.height + 4, FlxG.width, "", isMobile ? 16 : 14, COLOR_ACCENT, CENTER);
 		add(thinkingText);
 
-		var historyPad:Int = isMobile ? 30 : 20;
+		historyPad = isMobile ? 30 : 20;
 		var historyTop:Int = Std.int(body.y + 90);
 		var historyHeight:Int = FlxG.height - historyTop - (isMobile ? 100 : 70);
 
@@ -114,38 +132,29 @@ class MainMenuState extends FlxState
 		historyText = FlixelShark.makeText(historyPad, historyTop + 10, FlxG.width - historyPad * 2, "", isMobile ? 20 : 16, COLOR_FOAM, LEFT);
 		add(historyText);
 
-		var inputHeight:Int = Resolution4K.scaledInt(isMobile ? 60 : 40);
-		var inputWidth:Int = isMobile ? FlxG.width - Resolution4K.scaledInt(160) : FlxG.width - Resolution4K.scaledInt(140);
-
-		inputField = new FlxInputText(historyPad, FlxG.height - inputHeight - 20, inputWidth, "", Resolution4K.scaledInt(isMobile ? 20 : 16), COLOR_FOAM);
-		inputField.backgroundColor = COLOR_MID;
-		inputField.borderColor = COLOR_ACCENT;
-		inputField.borderStyle = OUTLINE;
-		inputField.borderSize = 2;
-		add(inputField);
-
-		sendButton = createIconButton(historyPad + inputWidth + 10, FlxG.height - inputHeight - 20, inputHeight, inputHeight, COLOR_WAVE, onSendPressed);
-		addSendIcon(sendButton);
-
-		inputFieldBaseY = inputField.y;
-		sendButtonBaseY = sendButton.y;
+		createChatControls();
 
 		var topBarSize:Int = Resolution4K.scaledInt(isMobile ? 44 : 32);
 
-		muteButton = createIconButton(20, 12, topBarSize, topBarSize, COLOR_MID, onMutePressed);
-		muteIcon = addMuteIcon(muteButton, Audio.isMuted);
+		muteButton = FlixelShark.createIconButton(this, 20, 12, topBarSize, topBarSize, COLOR_MID, onMutePressed);
+		muteIcon = FlixelShark.addSpeakerIcon(this, muteButton, Audio.isMuted, COLOR_FOAM, COLOR_DANGER, COLOR_ACCENT);
 
-		newChatButton = createIconButton(muteButton.x + muteButton.width + 10, 12, topBarSize, topBarSize, COLOR_MID, onNewChatPressed);
-		addPlusIcon(newChatButton);
+		newChatButton = FlixelShark.createIconButton(this, muteButton.x + muteButton.width + 10, 12, topBarSize, topBarSize, COLOR_MID, onNewChatPressed);
+		FlixelShark.addPlusIcon(this, newChatButton, COLOR_FOAM);
 
-		optionsButton = createIconButton(newChatButton.x + newChatButton.width + 10, 12, topBarSize, topBarSize, COLOR_MID, onOptionsPressed);
-		addMenuIcon(optionsButton);
+		optionsButton = FlixelShark.createIconButton(this, newChatButton.x + newChatButton.width + 10, 12, topBarSize, topBarSize, COLOR_MID,
+			onOptionsPressed);
+		FlixelShark.addMenuIcon(this, optionsButton, COLOR_FOAM);
 
 		Boost.initialize();
 
-		boostButton = createIconButton(optionsButton.x + optionsButton.width + 10, 12, topBarSize, topBarSize,
+		boostButton = FlixelShark.createIconButton(this, optionsButton.x + optionsButton.width + 10, 12, topBarSize, topBarSize,
 			Boost.isBoostActive ? COLOR_ONLINE : COLOR_MID, onBoostPressed);
 		FlixelShark.addBoltIcon(this, boostButton, COLOR_FOAM);
+
+		#if SHARK_DEV_MODE
+		createDebugButton(boostButton.x + boostButton.width + 10, 12, topBarSize);
+		#end
 
 		Internet.addListener(onOnlineStatusChanged);
 		AndroidKeyboard.initialize();
@@ -168,98 +177,75 @@ class MainMenuState extends FlxState
 		animateTitle();
 	}
 
-	function createIconButton(x:Float, y:Float, width:Int, height:Int, color:FlxColor, onClick:Void->Void):FlxButton
+	static function ensureToolkit():Void
 	{
-		var button = new FlxButton(x, y, "", onClick);
-		button.setSize(width, height);
-		button.color = color;
-		button.label.text = "";
-		add(button);
-		return button;
+		if (toolkitInitialized)
+			return;
+
+		toolkitInitialized = true;
+		Toolkit.init();
 	}
 
-	function addSendIcon(button:FlxButton):Void
+	function addUI<T:Component>(component:T):T
 	{
-		var cx:Float = button.x + button.width / 2;
-		var cy:Float = button.y + button.height / 2;
-		var barLength:Float = button.height * 0.32;
-
-		var top = FlixelShark.makeSprite(0, 0, Std.int(barLength), 4, COLOR_FOAM);
-		top.angle = -45;
-		top.setPosition(cx - barLength * 0.55, cy - barLength * 0.5);
-		add(top);
-
-		var bottom = FlixelShark.makeSprite(0, 0, Std.int(barLength), 4, COLOR_FOAM);
-		bottom.angle = 45;
-		bottom.setPosition(cx - barLength * 0.55, cy + barLength * 0.15);
-		add(bottom);
+		Screen.instance.addComponent(component);
+		uiComponents.push(component);
+		return component;
 	}
 
-	function addPlusIcon(button:FlxButton):Void
+	function createChatControls():Void
 	{
-		var cx:Float = button.x + button.width / 2;
-		var cy:Float = button.y + button.height / 2;
-		var length:Float = button.height * 0.5;
+		var inputHeight:Int = Resolution4K.scaledInt(isMobile ? 60 : 40);
+		var sendWidth:Int = Resolution4K.scaledInt(isMobile ? 90 : 70);
+		var inputWidth:Int = FlxG.width - historyPad * 2 - sendWidth - 10;
+		var rowTop:Float = FlxG.height - inputHeight - 20;
 
-		var vertical = FlixelShark.makeSprite(cx - 2, cy - length / 2, 4, Std.int(length), COLOR_FOAM);
-		add(vertical);
+		inputField = addUI(new UITextField());
+		inputField.left = historyPad;
+		inputField.top = rowTop;
+		inputField.width = inputWidth;
+		inputField.height = inputHeight;
+		inputField.text = "";
 
-		var horizontal = FlixelShark.makeSprite(cx - length / 2, cy - 2, Std.int(length), 4, COLOR_FOAM);
-		add(horizontal);
-	}
-
-	function addMenuIcon(button:FlxButton):Void
-	{
-		var cx:Float = button.x + button.width / 2;
-		var cy:Float = button.y + button.height / 2;
-		var barWidth:Float = button.width * 0.5;
-
-		for (i in 0...3)
+		sendButton = addUI(new UIButton());
+		sendButton.text = Language.get("chat.send");
+		sendButton.left = historyPad + inputWidth + 10;
+		sendButton.top = rowTop;
+		sendButton.width = sendWidth;
+		sendButton.height = inputHeight;
+		sendButton.onClick = function(e:Dynamic):Void
 		{
-			var bar = FlixelShark.makeSprite(cx - barWidth / 2, cy - 8 + i * 8, Std.int(barWidth), 3, COLOR_FOAM);
-			add(bar);
-		}
+			Vibration.trigger(HapticStyle.MEDIUM);
+			onSendPressed();
+		};
+
+		inputFieldBaseY = inputField.top;
+		sendButtonBaseY = sendButton.top;
 	}
 
-	function addMuteIcon(button:FlxButton, muted:Bool):FlxSpriteGroup
+	#if SHARK_DEV_MODE
+	function createDebugButton(x:Float, y:Float, size:Int):Void
 	{
-		var group = new FlxSpriteGroup(button.x, button.y);
-
-		var cx:Float = button.width / 2;
-		var cy:Float = button.height / 2;
-
-		var speakerBody = FlixelShark.makeSprite(cx - 9, cy - 5, 6, 10, COLOR_FOAM);
-		group.add(speakerBody);
-
-		var cone = FlixelShark.makeSprite(cx - 4, cy - 8, 6, 16, COLOR_FOAM);
-		cone.angle = 25;
-		group.add(cone);
-
-		if (muted)
+		debugButton = addUI(new UIButton());
+		debugButton.text = "Debug";
+		debugButton.left = x;
+		debugButton.top = y;
+		debugButton.width = Resolution4K.scaledInt(76);
+		debugButton.height = size;
+		debugButton.onClick = function(e:Dynamic):Void
 		{
-			var slash = FlixelShark.makeSprite(cx - 1, cy - 9, 3, 18, COLOR_DANGER);
-			slash.angle = 45;
-			group.add(slash);
-		}
-		else
-		{
-			for (i in 0...2)
-			{
-				var wave = FlixelShark.makeSprite(cx + 4 + i * 5, cy - 4 - i * 1, 2, Std.int(8 + i * 6), COLOR_ACCENT, 0.8);
-				group.add(wave);
-			}
-		}
-
-		add(group);
-		return group;
+			Vibration.trigger(HapticStyle.SELECTION);
+			FlixelShark.switchState(new DebugMenuState(), true, 0.4, COLOR_ABYSS);
+		};
 	}
+	#end
 
 	function refreshMuteIcon(muted:Bool):Void
 	{
 		if (muteIcon != null)
 			remove(muteIcon, true);
 
-		muteIcon = addMuteIcon(muteButton, muted);
+		muteIcon = FlixelShark.addSpeakerIcon(this, muteButton, muted, COLOR_FOAM, COLOR_DANGER, COLOR_ACCENT);
 	}
 
 	function onNavigateRequest(destination:String):Void
@@ -315,19 +301,7 @@ class MainMenuState extends FlxState
 	function createLightRays():Void
 	{
 		var rayCount:Int = isMobile ? 3 : 5;
-
-		for (i in 0...rayCount)
-		{
-			var ray = FlixelShark.makeStaticSprite(Std.random(FlxG.width), -100, 30 + Std.random(20), FlxG.height + 200, COLOR_FOAM, 0.03 + Std.random(4) / 100);
-			ray.angle = -15;
-			add(ray);
-			lightRays.push(ray);
-
-			FlxTween.tween(ray, {x: ray.x + 60}, 8 + Std.random(4), {
-				ease: FlxEase.sineInOut,
-				type: PINGPONG
-			});
-		}
+		lightRays = FlixelShark.createLightRays(this, rayCount, COLOR_FOAM);
 	}
 
 	function createWaveBackground():Void
@@ -352,16 +326,7 @@ class MainMenuState extends FlxState
 	function createKelp():Void
 	{
 		var bladeCount:Int = isMobile ? 5 : 8;
-
-		for (i in 0...bladeCount)
-		{
-			var height:Int = 40 + Std.random(60);
-			var blade = FlixelShark.makeSprite((i / bladeCount) * FlxG.width + Std.random(20), FlxG.height - height, 8, height, COLOR_KELP, 0.5);
-			blade.origin.set(4, height);
-			add(blade);
-
-			kelpBlades.push({sprite: blade, offset: Std.random(6283) / 1000, speed: 1 + Std.random(50) / 100});
-		}
+		kelpBlades = FlixelShark.createKelpField(this, bladeCount, COLOR_KELP);
 	}
 
 	function createStatusIndicator():Void
@@ -378,15 +343,10 @@ class MainMenuState extends FlxState
 		super.update(elapsed);
 
 		FlixelShark.updateBubbleField(bubbles, elapsed);
+		FlixelShark.updateKelpField(kelpBlades, elapsed);
 
 		if (waterShader != null)
 			waterShader.update(elapsed);
-
-		for (blade in kelpBlades)
-		{
-			blade.offset += elapsed * blade.speed;
-			blade.sprite.angle = Math.sin(blade.offset) * 6;
-		}
 
 		if (Head.isThinking)
 		{
@@ -421,10 +381,7 @@ class MainMenuState extends FlxState
 	function onSendPressed():Void
 	{
 		if (inputField.text.length > 0)
-		{
 			sendMessage(inputField.text);
-			pulseButton(sendButton);
-		}
 	}
 
 	function pulseButton(button:FlxButton):Void
@@ -451,7 +408,7 @@ class MainMenuState extends FlxState
 
 		Audio.play("message_send");
 
-		sendButton.alive = false;
+		sendButton.disabled = true;
 
 		Head.think(message, onReply, onError, onImageGenerated, onImageError);
 	}
@@ -478,14 +435,14 @@ class MainMenuState extends FlxState
 	{
 		appendToHistory(Language.get("app.name") + ": " + reply);
 		Audio.play("message_receive");
-		sendButton.alive = Internet.isConnected;
+		sendButton.disabled = !Internet.isConnected;
 		body.reactToReplyReceived();
 	}
 
 	function onError(error:String):Void
 	{
 		appendToHistory("Error: " + error);
-		sendButton.alive = Internet.isConnected;
+		sendButton.disabled = !Internet.isConnected;
 		body.reactToError();
 	}
 
@@ -549,11 +506,11 @@ class MainMenuState extends FlxState
 			return;
 
 		var estimatedKeyboardHeight:Float = FlxG.height * 0.35;
-		var targetInputY:Float = visible ? inputFieldBaseY - estimatedKeyboardHeight : inputFieldBaseY;
-		var targetSendY:Float = visible ? sendButtonBaseY - estimatedKeyboardHeight : sendButtonBaseY;
+		var targetInputTop:Float = visible ? inputFieldBaseY - estimatedKeyboardHeight : inputFieldBaseY;
+		var targetSendTop:Float = visible ? sendButtonBaseY - estimatedKeyboardHeight : sendButtonBaseY;
 
-		FlxTween.tween(inputField, {y: targetInputY}, 0.2, {ease: FlxEase.quadOut});
-		FlxTween.tween(sendButton, {y: targetSendY}, 0.2, {ease: FlxEase.quadOut});
+		FlxTween.tween(inputField, {top: targetInputTop}, 0.2, {ease: FlxEase.quadOut});
+		FlxTween.tween(sendButton, {top: targetSendTop}, 0.2, {ease: FlxEase.quadOut});
 	}
 
 	function onOnlineStatusChanged(online:Bool):Void
@@ -561,7 +518,7 @@ class MainMenuState extends FlxState
 		statusDot.color = online ? COLOR_ONLINE : COLOR_OFFLINE;
 		statusText.color = online ? COLOR_ONLINE : COLOR_OFFLINE;
 		statusText.text = Internet.getStatusLabel();
-		sendButton.alive = online && !Head.isThinking;
+		sendButton.disabled = !(online && !Head.isThinking);
 
 		if (online)
 		{
@@ -583,5 +540,15 @@ class MainMenuState extends FlxState
 	{
 		conversation.push(line);
 		historyText.text = conversation.join("\n");
+	}
+
+	override public function destroy():Void
+	{
+		for (component in uiComponents)
+			Screen.instance.removeComponent(component);
+
+		uiComponents = [];
+
+		super.destroy();
 	}
 }
