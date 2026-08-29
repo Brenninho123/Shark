@@ -28,7 +28,7 @@ import shark.backend.Language;
 import shark.backend.Paths;
 import shark.functions.ChatEngine;
 import shark.menus.options.OptionsState;
-import shark.mobile.backend.HapticStyle;
+import shark.mobile.backend.Vibration.HapticStyle;
 import shark.mobile.backend.Vibration;
 import shark.online.Online;
 import shark.online.manager.Internet;
