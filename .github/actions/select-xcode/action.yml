@@ -1,0 +1,20 @@
+name: Select latest available Xcode
+description: Points xcode-select at the newest Xcode.app installed on the runner instead of a hardcoded version
+
+runs:
+  using: composite
+  steps:
+    - name: Select Xcode
+      shell: bash
+      run: |
+        LATEST_XCODE=$(ls /Applications | grep -E '^Xcode_[0-9]+(\.[0-9]+)*\.app$' | sort -V | tail -n1)
+
+        if [ -n "$LATEST_XCODE" ]; then
+          echo "Selecting /Applications/$LATEST_XCODE"
+          sudo xcode-select -s "/Applications/$LATEST_XCODE"
+        else
+          echo "No versioned Xcode.app found, keeping the default toolchain"
+        fi
+
+        xcodebuild -version
+        rm -rf ~/Library/Developer/Xcode/DerivedData
