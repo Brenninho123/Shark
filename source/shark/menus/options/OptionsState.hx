@@ -14,7 +14,7 @@ import flixel.FlixelShark;
 import git.graphic.GraphicGit;
 import shark.backend.Language;
 import shark.menus.MainMenuState;
-import shark.mobile.backend.HapticStyle;
+import shark.mobile.backend.Vibration.HapticStyle;
 import shark.mobile.backend.Vibration;
 import shark.ui.debug.CrasherLog;
 import Main;
