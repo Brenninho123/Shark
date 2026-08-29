@@ -64,9 +64,7 @@ class MainMenuState extends FlxState
 	var optionsButton:FlxButton;
 	var boostButton:FlxButton;
 
-	#if SHARK_DEV_MODE
 	var debugButton:UIButton;
-	#end
 
 	var inputFieldBaseY:Float;
 	var sendButtonBaseY:Float;
@@ -152,9 +150,8 @@ class MainMenuState extends FlxState
 			Boost.isBoostActive ? COLOR_ONLINE : COLOR_MID, onBoostPressed);
 		FlixelShark.addBoltIcon(this, boostButton, COLOR_FOAM);
 
-		#if SHARK_DEV_MODE
-		createDebugButton(boostButton.x + boostButton.width + 10, 12, topBarSize);
-		#end
+		if (Main.isDevModeActive())
+			createDebugButton(boostButton.x + boostButton.width + 10, 12, topBarSize);
 
 		Internet.addListener(onOnlineStatusChanged);
 		AndroidKeyboard.initialize();
@@ -223,7 +220,6 @@ class MainMenuState extends FlxState
 		sendButtonBaseY = sendButton.top;
 	}
 
-	#if SHARK_DEV_MODE
 	function createDebugButton(x:Float, y:Float, size:Int):Void
 	{
 		debugButton = addUI(new UIButton());
@@ -238,7 +234,6 @@ class MainMenuState extends FlxState
 			FlixelShark.switchState(new DebugMenuState(), true, 0.4, COLOR_ABYSS);
 		};
 	}
-	#end
 
 	function refreshMuteIcon(muted:Bool):Void
 	{
