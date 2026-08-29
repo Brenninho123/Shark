@@ -6,15 +6,18 @@ import flixel.graphics.frames.FlxAtlasFrames;
 import openfl.Assets;
 import openfl.display.BitmapData;
 import openfl.media.Sound;
+import openfl.net.URLRequest;
 import openfl.text.Font;
 import shark.backend.JsonObject;
 import shark.modding.Module;
+import shark.ui.debug.CrasherLog;
 
 import Main;
 
 class Paths
 {
 	static inline var ASSET_ROOT:String = "assets";
+	static inline var MAX_GRAPHIC_CACHE_SIZE:Int = 120;
 
 	public static var modOverridesEnabled:Bool = true;
 
@@ -27,6 +30,14 @@ class Paths
 	static var modOverrideCache:Map<String, Bool> = new Map();
 
 	static var persistentKeys:Map<String, Bool> = new Map();
+	static var graphicAccessOrder:Array<String> = [];
+
+	static var modSourcedGraphicKeys:Map<String, Bool> = new Map();
+	static var modSourcedTextKeys:Map<String, Bool> = new Map();
+	static var modSourcedSoundKeys:Map<String, Bool> = new Map();
+
+	static var cacheHits:Int = 0;
+	static var cacheMisses:Int = 0;
 
 	public static function image(key:String):String
 	{
@@ -123,21 +134,101 @@ class Paths
 		return getModOverridePath(category, key, extension) != null;
 	}
 
+	public static function describeAsset(category:String, key:String, extension:String):String
+	{
+		var overridePath:String = getModOverridePath(category, key, extension);
+		return overridePath != null ? 'mod override: $overridePath' : "base game asset";
+	}
+
 	public static function clearModOverrideCache():Void
 	{
 		modOverrideCache = new Map();
 	}
 
+	public static function onModsReloaded():Void
+	{
+		clearModOverrideCache();
+
+		for (key in modSourcedGraphicKeys.keys())
+		{
+			if (graphicCache.exists(key))
+			{
+				var graphic:FlxGraphic = graphicCache.get(key);
+
+				if (graphic != null)
+					graphic.destroy();
+
+				graphicCache.remove(key);
+			}
+
+			graphicAccessOrder.remove(key);
+		}
+
+		for (key in modSourcedTextKeys.keys())
+			textCache.remove(key);
+
+		for (key in modSourcedSoundKeys.keys())
+			soundCache.remove(key);
+
+		modSourcedGraphicKeys = new Map();
+		modSourcedTextKeys = new Map();
+		modSourcedSoundKeys = new Map();
+		existsCache = new Map();
+
+		CrasherLog.addBreadcrumb("Paths caches invalidated after mod reload", "assets");
+	}
+
+	static function touchGraphicAccess(key:String):Void
+	{
+		graphicAccessOrder.remove(key);
+		graphicAccessOrder.push(key);
+		evictOldestGraphicIfNeeded();
+	}
+
+	static function evictOldestGraphicIfNeeded():Void
+	{
+		if (graphicAccessOrder.length <= MAX_GRAPHIC_CACHE_SIZE)
+			return;
+
+		for (i in 0...graphicAccessOrder.length)
+		{
+			var candidate:String = graphicAccessOrder[i];
+
+			if (persistentKeys.exists(candidate))
+				continue;
+
+			graphicAccessOrder.splice(i, 1);
+
+			if (graphicCache.exists(candidate))
+			{
+				var graphic:FlxGraphic = graphicCache.get(candidate);
+
+				if (graphic != null)
+					graphic.destroy();
+
+				graphicCache.remove(candidate);
+			}
+
+			return;
+		}
+	}
+
 	public static function getGraphic(key:String, persist:Bool = false, checkCompressed:Bool = false):FlxGraphic
 	{
 		if (graphicCache.exists(key))
+		{
+			cacheHits++;
+			touchGraphicAccess(key);
 			return graphicCache.get(key);
+		}
+
+		cacheMisses++;
 
 		if (hasModOverride("images", key, "png"))
-			shark.ui.debug.CrasherLog.logWarning('Mod override found for image "$key" - use getGraphicAsync() to actually load it (synchronous getGraphic() cannot load external mod files)');
+			CrasherLog.logWarning('Mod override found for image "$key" - use getGraphicAsync() or preloadModOverrides() first, since synchronous getGraphic() cannot load external mod files', "assets");
 
 		if (checkCompressed && shouldUseAstc(key))
-			shark.ui.debug.CrasherLog.logWarning('ASTC variant found for "$key" but GPU texture upload is not implemented yet; using PNG fallback');
+			CrasherLog.logWarning('ASTC variant found for "$key" but GPU texture upload is not implemented yet; using PNG fallback', "assets");
 
 		var path:String = image(key);
 
@@ -149,6 +240,7 @@ class Paths
 		graphic.persist = persist;
 
 		graphicCache.set(key, graphic);
+		touchGraphicAccess(key);
 
 		if (persist)
 			persistentKeys.set(key, true);
@@ -160,9 +252,13 @@ class Paths
 	{
 		if (graphicCache.exists(key))
 		{
+			cacheHits++;
+			touchGraphicAccess(key);
 			onComplete(graphicCache.get(key));
 			return;
 		}
+
+		cacheMisses++;
 
 		var overridePath:String = getModOverridePath("images", key, "png");
 
@@ -185,6 +281,8 @@ class Paths
 			graphic.persist = persist;
 
 			graphicCache.set(key, graphic);
+			touchGraphicAccess(key);
+			modSourcedGraphicKeys.set(key, true);
 
 			if (persist)
 				persistentKeys.set(key, true);
@@ -197,6 +295,30 @@ class Paths
 		#else
 		onComplete(getGraphic(key, persist));
 		#end
+	}
+
+	public static function preloadModOverrides(keys:Array<String>, ?onComplete:Void->Void):Void
+	{
+		var remaining:Int = keys.length;
+
+		if (remaining == 0)
+		{
+			if (onComplete != null)
+				onComplete();
+
+			return;
+		}
+
+		for (key in keys)
+		{
+			getGraphicAsync(key, function(_):Void
+			{
+				remaining--;
+
+				if (remaining <= 0 && onComplete != null)
+					onComplete();
+			});
+		}
 	}
 
 	public static function getSparrowAtlas(key:String, persist:Bool = false):FlxAtlasFrames
@@ -226,7 +348,35 @@ class Paths
 	public static function getSound(key:String, persist:Bool = false):Sound
 	{
 		if (soundCache.exists(key))
+		{
+			cacheHits++;
 			return soundCache.get(key);
+		}
+
+		cacheMisses++;
+
+		#if sys
+		var overridePath:String = getModOverridePath("sounds", key, soundExtension);
+
+		if (overridePath != null)
+		{
+			try
+			{
+				var moddedSound:Sound = new Sound(new URLRequest(overridePath));
+				soundCache.set(key, moddedSound);
+				modSourcedSoundKeys.set(key, true);
+
+				if (persist)
+					persistentKeys.set(key, true);
+
+				return moddedSound;
+			}
+			catch (e:Dynamic)
+			{
+				CrasherLog.logWarning('Failed to load mod sound override "$overridePath": ${Std.string(e)}', "assets");
+			}
+		}
+		#end
 
 		var path:String = sound(key);
 
@@ -247,6 +397,9 @@ class Paths
 		if (fontCache.exists(key))
 			return fontCache.get(key);
 
+		if (hasModOverride("fonts", key, "ttf"))
+			CrasherLog.logWarning('Mod override found for font "$key" but external font loading is not supported yet - using bundled font', "assets");
+
 		var path:String = font(key);
 
 		if (!exists(path))
@@ -266,7 +419,12 @@ class Paths
 		var cacheKey:String = '$key.$extension';
 
 		if (textCache.exists(cacheKey))
+		{
+			cacheHits++;
 			return textCache.get(cacheKey);
+		}
+
+		cacheMisses++;
 
 		var overridePath:String = getModOverridePath("data", key, extension);
 
@@ -277,6 +435,7 @@ class Paths
 			{
 				var overrideContent:String = sys.io.File.getContent(overridePath);
 				textCache.set(cacheKey, overrideContent);
+				modSourcedTextKeys.set(cacheKey, true);
 				return overrideContent;
 			}
 			catch (e:Dynamic) {}
@@ -414,6 +573,37 @@ class Paths
 			onComplete();
 	}
 
+	public static function preloadWithProgressAsync(keys:Array<String>, kind:String, batchSize:Int = 5, ?onProgress:Float->Void, ?onComplete:Void->Void,
+			persist:Bool = true):Void
+	{
+		var index:Int = 0;
+
+		function loadBatch():Void
+		{
+			var end:Int = Std.int(Math.min(index + batchSize, keys.length));
+
+			while (index < end)
+			{
+				if (kind == "sound")
+					getSound(keys[index], persist);
+				else
+					getGraphic(keys[index], persist);
+
+				index++;
+			}
+
+			if (onProgress != null)
+				onProgress(index / keys.length);
+
+			if (index < keys.length)
+				haxe.Timer.delay(loadBatch, 1);
+			else if (onComplete != null)
+				onComplete();
+		}
+
+		loadBatch();
+	}
+
 	public static function randomSoundVariant(baseKey:String, count:Int):String
 	{
 		var index:Int = 1 + Std.random(count);
@@ -467,6 +657,26 @@ class Paths
 		return count;
 	}
 
+	public static function getStatusSummary():String
+	{
+		var totalRequests:Int = cacheHits + cacheMisses;
+		var hitRate:Float = totalRequests > 0 ? (cacheHits / totalRequests) * 100 : 0;
+
+		return 'Paths: ${getCacheStats()} | hit rate ${formatDecimal(hitRate, 1)}% | mods ${modOverridesEnabled ? "enabled" : "disabled"}';
+	}
+
+	static function formatDecimal(value:Float, decimals:Int):String
+	{
+		var factor:Float = Math.pow(10, decimals);
+		var rounded:Float = Math.round(value * factor) / factor;
+		var text:String = Std.string(rounded);
+
+		if (text.indexOf(".") == -1)
+			text += ".0";
+
+		return text;
+	}
+
 	public static function clearVolatileCache():Void
 	{
 		clearCache(false);
@@ -483,6 +693,7 @@ class Paths
 				graphic.destroy();
 
 			graphicCache.remove(key);
+			graphicAccessOrder.remove(key);
 		}
 
 		for (key in soundCache.keys())
@@ -498,6 +709,11 @@ class Paths
 		modOverrideCache = new Map();
 
 		if (includePersistent)
+		{
 			persistentKeys = new Map();
+			modSourcedGraphicKeys = new Map();
+			modSourcedTextKeys = new Map();
+			modSourcedSoundKeys = new Map();
+		}
 	}
 }
