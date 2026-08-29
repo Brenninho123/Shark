@@ -1,0 +1,19 @@
+{
+	"id": "example-mod",
+	"title": "Example Mod",
+	"description": "A short description of what this mod pack changes or adds.",
+	"modVersion": "1.0.0",
+	"apiVersion": "^0.2.0",
+	"author": "Your Name",
+	"contributors": [],
+	"homepage": "",
+	"license": "MIT",
+	"icon": "icon.png",
+	"tags": [],
+	"loadPriority": 0,
+	"enabledByDefault": true,
+	"assetsOverride": true,
+	"scripts": [],
+	"dependencies": [],
+	"optionalDependencies": []
+}
