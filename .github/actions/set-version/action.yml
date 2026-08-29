@@ -1,0 +1,12 @@
+name: Set version from git tag
+description: Writes the VERSION file to match the pushed release tag, so the packaged app version matches the GitHub release
+
+runs:
+  using: composite
+  steps:
+    - name: Set version from tag
+      if: startsWith(github.ref, 'refs/tags/v')
+      shell: bash
+      run: |
+        echo "${GITHUB_REF_NAME#v}" > VERSION
+        echo "VERSION set to $(cat VERSION)"
