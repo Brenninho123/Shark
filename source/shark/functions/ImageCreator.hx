@@ -11,7 +11,7 @@ import openfl.events.IOErrorEvent;
 import openfl.utils.ByteArray;
 import shark.Content;
 import shark.data.license.ImageLicense;
-import shark.mobile.backend.HapticStyle;
+import shark.mobile.backend.Vibration.HapticStyle;
 import shark.mobile.backend.Vibration;
 import shark.online.Network;
 import shark.online.NetworkResponse;
