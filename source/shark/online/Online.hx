@@ -842,7 +842,7 @@ class Online
 		var lines:Array<String> = [];
 
 		lines.push('status: ${isOnline ? "online" : "offline"} (${getStabilityLabel()}, score ${getQualityScore()})');
-		lines.push('uptime: ${getUptimePercentage().toStringPrecision(1)}% over ${Std.int(totalTrackedSeconds)}s tracked');
+		lines.push('uptime: ${formatDecimal(getUptimePercentage(), 1)}% over ${Std.int(totalTrackedSeconds)}s tracked');
 		lines.push('latency: ${averageLatencyMs < 0 ? "n/a" : Std.int(averageLatencyMs) + "ms"}, jitter ${Std.int(jitterMs)}ms');
 		lines.push('bandwidth: ${bandwidthKbps < 0 ? "n/a" : Std.int(bandwidthKbps) + " kbps"}');
 		lines.push('failures: $consecutiveFailures consecutive');
@@ -853,6 +853,18 @@ class Online
 			lines.push('api: ${apiOnline ? "online" : "offline"}${apiCircuitOpen ? " (circuit open)" : ""}, latency ${apiLatencyMs < 0 ? "n/a" : Std.int(apiLatencyMs) + "ms"}');
 
 		return lines.join("\n");
+	}
+
+	static function formatDecimal(value:Float, decimals:Int):String
+	{
+		var factor:Float = Math.pow(10, decimals);
+		var rounded:Float = Math.round(value * factor) / factor;
+		var text:String = Std.string(rounded);
+
+		if (text.indexOf(".") == -1)
+			text += ".0";
+
+		return text;
 	}
 
 	static function attachBrowserListeners():Void
