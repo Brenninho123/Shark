@@ -4,6 +4,7 @@ import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.FlxState;
 import flixel.group.FlxSpriteGroup;
+import flixel.math.FlxRect;
 import flixel.text.FlxText;
 import flixel.text.FlxText.FlxTextAlign;
 import flixel.ui.FlxButton;
@@ -223,7 +224,7 @@ class FlixelShark
 	public static function setProgressBarValue(fillSprite:FlxSprite, fullWidth:Float, progress:Float):Void
 	{
 		var clamped:Float = clampAlpha(progress);
-		fillSprite.clipRect = new openfl.geom.Rectangle(0, 0, fullWidth * clamped, fillSprite.height);
+		fillSprite.clipRect = new FlxRect(0, 0, fullWidth * clamped, fillSprite.height);
 	}
 
 	public static function makeScaledText(x:Float, y:Float, width:Float, text:String, baseSize:Int = 16, color:FlxColor = FlxColor.WHITE,
