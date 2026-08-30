@@ -166,7 +166,7 @@ class Vibration
 
 	public static function comboBreak():Void
 	{
-		trigger(ERROR, true);
+		trigger(FAILURE, true);
 	}
 
 	public static function menuSelect():Void
