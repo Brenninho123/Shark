@@ -195,7 +195,7 @@ class Project extends HXProject
 		try
 		{
 			var parsed:Dynamic = Json.parse(File.getContent(path));
-			var knownSections:Array<String> = ["network", "chat", "api", "image", "audio", "security", "connectivity", "app", "discord", "platforms"];
+			var knownSections:Array<String> = ["network", "chat", "api", "image", "audio", "security", "connectivity", "app", "discord", "platforms", "servers"];
 			var unknownSections:Array<String> = [];
 
 			for (field in Reflect.fields(parsed))
