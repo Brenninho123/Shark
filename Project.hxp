@@ -253,7 +253,7 @@ class Project extends HXProject
 
 	function checkDependencyIntegrity():Void
 	{
-		var required:Array<String> = ["lime", "openfl", "flixel", "flixel-addons", "hscript", "polymod", "haxeui-core", "haxeui-flixel"];
+		var required:Array<String> = ["lime", "openfl", "flixel", "flixel-addons", "hscript", "polymod"];
 		var missing:Array<String> = [];
 
 		try
@@ -530,10 +530,6 @@ class Project extends HXProject
 
 		addHaxelib("hxmath", pinned);
 		haxedefs.set("HXMATH_USE_OPENFL_STRUCTURES", "");
-
-		addHaxelib("haxeui-core", pinned);
-		addHaxelib("haxeui-flixel", pinned);
-		activeFeatures.push("HaxeUI");
 
 		addHaxelib("newgrounds", pinned);
 		activeFeatures.push("Newgrounds API");
