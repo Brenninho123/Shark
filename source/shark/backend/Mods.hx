@@ -214,7 +214,7 @@ class Mods
 			case "selection": SELECTION;
 			case "success": SUCCESS;
 			case "warning": WARNING;
-			case "error": ERROR;
+			case "error": FAILURE;
 			case "notification": NOTIFICATION;
 			default: MEDIUM;
 		}
