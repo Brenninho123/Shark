@@ -98,16 +98,6 @@
 			"version": "0.18.0"
 		},
 		{
-			"name": "haxeui-core",
-			"type": "haxelib",
-			"version": "1.7.0"
-		},
-		{
-			"name": "haxeui-flixel",
-			"type": "haxelib",
-			"version": "1.7.0"
-		},
-		{
 			"name": "newgrounds",
 			"type": "haxelib",
 			"version": "2.0.3"
