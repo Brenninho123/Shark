@@ -254,7 +254,7 @@ class DebugMenuState extends FlxState
 		{
 			CrasherLog.logWarning('Failed to open debug menu entry "${entry.label}": ${Std.string(e)}', "editor");
 			showUnavailable('${entry.label} failed to open.');
-			Vibration.trigger(HapticStyle.ERROR);
+			Vibration.trigger(HapticStyle.FAILURE);
 		}
 	}
 
