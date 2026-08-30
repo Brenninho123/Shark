@@ -4,18 +4,15 @@ import flixel.FlxState;
 import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.text.FlxText;
+import flixel.text.FlxText.FlxTextAlign;
+import flixel.ui.FlxButton;
 import flixel.util.FlxColor;
-import haxe.ui.Toolkit;
-import haxe.ui.core.Component;
-import haxe.ui.core.Screen;
-import haxe.ui.components.Button as UIButton;
-import haxe.ui.components.Switch as UISwitch;
+import flixel.tweens.FlxTween;
+import flixel.tweens.FlxEase;
 import flixel.FlixelShark;
 import git.graphic.GraphicGit;
 import shark.backend.Language;
 import shark.menus.MainMenuState;
-import shark.mobile.backend.Vibration.HapticStyle;
-import shark.mobile.backend.Vibration;
 import shark.ui.debug.CrasherLog;
 import Main;
 
@@ -24,6 +21,11 @@ typedef OptionEntry = {
 	description:String,
 	getValue:Void->Bool,
 	onToggle:Void->Bool
+}
+
+typedef ToggleVisual = {
+	track:FlxSprite,
+	knob:FlxSprite
 }
 
 class OptionsState extends FlxState
@@ -36,14 +38,11 @@ class OptionsState extends FlxState
 	static inline var COLOR_ON:FlxColor = 0xFF4ADE80;
 	static inline var COLOR_OFF:FlxColor = 0xFFF87171;
 
-	static var toolkitInitialized:Bool = false;
-
 	var options:Array<OptionEntry>;
 
 	var titleText:FlxText;
 	var isMobile:Bool;
 	var contentEndY:Float;
-	var uiComponents:Array<Component> = [];
 
 	override public function create():Void
 	{
@@ -52,36 +51,18 @@ class OptionsState extends FlxState
 		isMobile = FlxG.onMobile;
 		bgColor = COLOR_ABYSS;
 
-		ensureToolkit();
-
 		options = buildOptions();
 
 		FlixelShark.createDepthGradient(this, [COLOR_ABYSS, COLOR_DEEP, COLOR_MID]);
 
 		titleText = new FlxText(0, isMobile ? 26 : 18, FlxG.width, Language.get("options.title"));
-		titleText.setFormat(null, isMobile ? 34 : 28, COLOR_FOAM, CENTER);
+		titleText.setFormat(null, isMobile ? 34 : 28, COLOR_FOAM, FlxTextAlign.CENTER);
 		titleText.setBorderStyle(SHADOW, COLOR_ACCENT, 2);
 		add(titleText);
 
 		createOptionsList();
 		createLanguageRow();
 		createFooterButtons();
-	}
-
-	static function ensureToolkit():Void
-	{
-		if (toolkitInitialized)
-			return;
-
-		toolkitInitialized = true;
-		Toolkit.init();
-	}
-
-	function addUI<T:Component>(component:T):T
-	{
-		Screen.instance.addComponent(component);
-		uiComponents.push(component);
-		return component;
 	}
 
 	function buildOptions():Array<OptionEntry>
@@ -119,7 +100,7 @@ class OptionsState extends FlxState
 		var newValue:Bool = !Main.settings.data.vibrationEnabled;
 
 		Main.settings.update(function(d) d.vibrationEnabled = newValue);
-		Vibration.setEnabled(newValue);
+		shark.mobile.backend.Vibration.setEnabled(newValue);
 
 		return newValue;
 	}
@@ -164,15 +145,15 @@ class OptionsState extends FlxState
 
 			createRowBackground(rowY);
 
-			var labelText = new FlxText(rowX() + 16, rowY + 8, rowWidth() - 140, entry.label);
-			labelText.setFormat(null, isMobile ? 20 : 16, COLOR_FOAM, LEFT);
+			var labelText = new FlxText(rowX() + 16, rowY + 8, rowWidth() * 0.6, entry.label);
+			labelText.setFormat(null, isMobile ? 20 : 16, COLOR_FOAM, FlxTextAlign.LEFT);
 			add(labelText);
 
-			var descText = new FlxText(rowX() + 16, rowY + 8 + (isMobile ? 26 : 20), rowWidth() - 140, entry.description);
-			descText.setFormat(null, isMobile ? 13 : 11, COLOR_ACCENT, LEFT);
+			var descText = new FlxText(rowX() + 16, rowY + 8 + (isMobile ? 26 : 20), rowWidth() * 0.6, entry.description);
+			descText.setFormat(null, isMobile ? 13 : 11, COLOR_ACCENT, FlxTextAlign.LEFT);
 			add(descText);
 
-			createToggleSwitch(entry, rowY);
+			createToggleRow(entry, rowY);
 		}
 
 		contentEndY = startY + options.length * rowSpacing();
@@ -184,22 +165,49 @@ class OptionsState extends FlxState
 		add(row);
 	}
 
-	function createToggleSwitch(entry:OptionEntry, rowY:Float):Void
+	function createToggleRow(entry:OptionEntry, rowY:Float):Void
 	{
 		var switchWidth:Float = isMobile ? 64 : 52;
 		var switchHeight:Float = isMobile ? 32 : 26;
+		var switchX:Float = rowX() + rowWidth() - switchWidth - 16;
+		var switchY:Float = rowY + rowHeight() / 2 - switchHeight / 2;
 
-		var toggle = addUI(new UISwitch());
-		toggle.selected = entry.getValue();
-		toggle.left = rowX() + rowWidth() - switchWidth - 16;
-		toggle.top = rowY + rowHeight() / 2 - switchHeight / 2;
-		toggle.width = switchWidth;
-		toggle.height = switchHeight;
-		toggle.onChange = function(e:Dynamic):Void
-		{
-			Vibration.trigger(HapticStyle.SELECTION);
-			entry.onToggle();
-		};
+		var visual:ToggleVisual = createToggleSwitch(switchX, switchY, switchWidth, switchHeight, entry.getValue());
+
+		var hitArea:FlxButton = FlixelShark.createIconButton(this, rowX(), rowY, Std.int(rowWidth()), Std.int(rowHeight()), FlxColor.TRANSPARENT,
+			function():Void
+			{
+				var newValue:Bool = entry.onToggle();
+				setToggleState(visual, newValue, switchX, switchWidth, switchHeight);
+			});
+
+		hitArea.alpha = 0;
+	}
+
+	function createToggleSwitch(x:Float, y:Float, width:Float, height:Float, isOn:Bool):ToggleVisual
+	{
+		var knobRadius:Float = height / 2 - 3;
+
+		var track:FlxSprite = GraphicGit.makePillSprite(x, y, Std.int(width), Std.int(height), isOn ? COLOR_ON : COLOR_OFF);
+		add(track);
+
+		var knob:FlxSprite = new FlxSprite();
+		knob.pixels = GraphicGit.createPolygon(knobRadius, 28, FlxColor.WHITE);
+		knob.y = y + height / 2 - knobRadius;
+		knob.x = isOn ? x + width - knobRadius * 2 - 3 : x + 3;
+		add(knob);
+
+		return {track: track, knob: knob};
+	}
+
+	function setToggleState(visual:ToggleVisual, isOn:Bool, x:Float, width:Float, height:Float):Void
+	{
+		visual.track.pixels = GraphicGit.createPill(Std.int(width), Std.int(height), isOn ? COLOR_ON : COLOR_OFF);
+
+		var knobRadius:Float = height / 2 - 3;
+		var targetX:Float = isOn ? x + width - knobRadius * 2 - 3 : x + 3;
+
+		FlxTween.tween(visual.knob, {x: targetX}, 0.15, {ease: FlxEase.quadOut});
 	}
 
 	function createLanguageRow():Void
@@ -209,23 +217,15 @@ class OptionsState extends FlxState
 		createRowBackground(rowY);
 
 		var labelText = new FlxText(rowX() + 16, rowY + 8, rowWidth() - 140, Language.get("options.language"));
-		labelText.setFormat(null, isMobile ? 20 : 16, COLOR_FOAM, LEFT);
+		labelText.setFormat(null, isMobile ? 20 : 16, COLOR_FOAM, FlxTextAlign.LEFT);
 		add(labelText);
 
 		var buttonWidth:Float = isMobile ? 110 : 84;
 		var buttonHeight:Float = isMobile ? 44 : 32;
 
-		var languageButton = addUI(new UIButton());
-		languageButton.text = Language.getLanguageName(Language.current);
-		languageButton.left = rowX() + rowWidth() - buttonWidth - 16;
-		languageButton.top = rowY + rowHeight() / 2 - buttonHeight / 2;
-		languageButton.width = buttonWidth;
-		languageButton.height = buttonHeight;
-		languageButton.onClick = function(e:Dynamic):Void
-		{
-			Vibration.trigger(HapticStyle.SELECTION);
-			onLanguagePressed();
-		};
+		var languageButton:FlxButton = FlixelShark.makeButton(rowX() + rowWidth() - buttonWidth - 16, rowY + rowHeight() / 2 - buttonHeight / 2,
+			Language.getLanguageName(Language.current), onLanguagePressed, Std.int(buttonWidth), Std.int(buttonHeight), COLOR_ACCENT, COLOR_ABYSS);
+		add(languageButton);
 
 		contentEndY = rowY + rowSpacing();
 	}
@@ -235,31 +235,15 @@ class OptionsState extends FlxState
 		var backWidth:Float = isMobile ? 120 : 90;
 		var backHeight:Float = isMobile ? 50 : 32;
 
-		var backButton = addUI(new UIButton());
-		backButton.text = Language.get("menu.backButton");
-		backButton.left = 20;
-		backButton.top = FlxG.height - (isMobile ? 70 : 50);
-		backButton.width = backWidth;
-		backButton.height = backHeight;
-		backButton.onClick = function(e:Dynamic):Void
-		{
-			Vibration.menuSelect();
-			onBackPressed();
-		};
+		var backButton:FlxButton = FlixelShark.makeButton(20, FlxG.height - (isMobile ? 70 : 50), Language.get("menu.backButton"), onBackPressed,
+			Std.int(backWidth), Std.int(backHeight), COLOR_MID, COLOR_FOAM);
+		add(backButton);
 
 		var resetWidth:Float = isMobile ? 160 : 130;
 
-		var resetButton = addUI(new UIButton());
-		resetButton.text = Language.get("options.reset");
-		resetButton.left = FlxG.width - resetWidth - 20;
-		resetButton.top = FlxG.height - (isMobile ? 70 : 50);
-		resetButton.width = resetWidth;
-		resetButton.height = backHeight;
-		resetButton.onClick = function(e:Dynamic):Void
-		{
-			Vibration.trigger(HapticStyle.WARNING);
-			onResetPressed();
-		};
+		var resetButton:FlxButton = FlixelShark.makeButton(FlxG.width - resetWidth - 20, FlxG.height - (isMobile ? 70 : 50), Language.get("options.reset"),
+			onResetPressed, Std.int(resetWidth), Std.int(backHeight), COLOR_OFF, COLOR_ABYSS);
+		add(resetButton);
 	}
 
 	function onLanguagePressed():Void
@@ -286,15 +270,5 @@ class OptionsState extends FlxState
 	function onBackPressed():Void
 	{
 		FlixelShark.switchState(new MainMenuState(), true, 0.4, COLOR_ABYSS);
-	}
-
-	override public function destroy():Void
-	{
-		for (component in uiComponents)
-			Screen.instance.removeComponent(component);
-
-		uiComponents = [];
-
-		super.destroy();
 	}
 }
