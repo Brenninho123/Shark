@@ -61,7 +61,22 @@ typedef SettingsData = {
 	vibrationIntensity:Float,
 	reducedMotion:Bool,
 	devModeEnabled:Bool,
-	languageOverride:String
+	languageOverride:String,
+	activeServerProfileId:String,
+	customServerLabel:String,
+	customServerChatEndpoint:String,
+	customServerImageEndpoint:String,
+	customServerApiKey:String
+}
+
+typedef ServerProfile = {
+	id:String,
+	label:String,
+	chatEndpoint:String,
+	imageEndpoint:String,
+	diagnosticsEndpoint:String,
+	requiresApiKey:Bool,
+	isOfficial:Bool
 }
 
 class Main extends Sprite
@@ -87,6 +102,7 @@ class Main extends Sprite
 	var debugOverlay:DebugDisplay;
 	var debugOverlayVisible:Bool = false;
 	var diagnosticsEndpoint:String = "";
+	var serverProfiles:Array<ServerProfile> = [];
 
 	public function new()
 	{
@@ -130,6 +146,7 @@ class Main extends Sprite
 
 		setupNetworkConfig();
 		setupSecurity();
+		setupServerProfiles();
 		setupConnectivity();
 		setupHeadSignals();
 		recordBootPhase("network_config_ready");
@@ -196,7 +213,12 @@ class Main extends Sprite
 			vibrationIntensity: 1,
 			reducedMotion: false,
 			devModeEnabled: false,
-			languageOverride: ""
+			languageOverride: "",
+			activeServerProfileId: "official",
+			customServerLabel: "",
+			customServerChatEndpoint: "",
+			customServerImageEndpoint: "",
+			customServerApiKey: ""
 		};
 	}
 
@@ -434,7 +456,7 @@ class Main extends Sprite
 	}
 
 	static var knownConfigSections:Array<String> = [
-		"network", "chat", "api", "image", "audio", "security", "connectivity", "app", "discord", "platforms"
+		"network", "chat", "api", "image", "audio", "security", "connectivity", "app", "discord", "platforms", "servers"
 	];
 
 	function validateConfigSchema(parsed:Dynamic):Void
@@ -477,6 +499,209 @@ class Main extends Sprite
 
 		if (section.diagnosticsEndpoint != null)
 			diagnosticsEndpoint = section.diagnosticsEndpoint;
+	}
+
+	function setupServerProfiles():Void
+	{
+		buildServerProfileList();
+
+		var active:ServerProfile = getActiveServerProfile();
+
+		if (active != null)
+			applyServerProfile(active);
+	}
+
+	function buildServerProfileList():Void
+	{
+		serverProfiles = [];
+
+		serverProfiles.push({
+			id: "official",
+			label: "Official",
+			chatEndpoint: ChatEngine.endpoint,
+			imageEndpoint: ImageCreator.endpoint,
+			diagnosticsEndpoint: diagnosticsEndpoint,
+			requiresApiKey: true,
+			isOfficial: true
+		});
+
+		var config:Dynamic = Paths.getJson("config");
+
+		if (config != null && Reflect.hasField(config, "servers"))
+		{
+			try
+			{
+				var list:Array<Dynamic> = Reflect.field(config, "servers");
+
+				for (entry in list)
+				{
+					var id:String = safeField(entry, "id", "");
+
+					if (id.length == 0)
+						continue;
+
+					serverProfiles.push({
+						id: id,
+						label: safeField(entry, "label", id),
+						chatEndpoint: safeField(entry, "chatEndpoint", ""),
+						imageEndpoint: safeField(entry, "imageEndpoint", ""),
+						diagnosticsEndpoint: safeField(entry, "diagnosticsEndpoint", ""),
+						requiresApiKey: Reflect.hasField(entry, "requiresApiKey") ? Reflect.field(entry, "requiresApiKey") == true : true,
+						isOfficial: false
+					});
+				}
+			}
+			catch (e:Dynamic)
+			{
+				CrasherLog.logWarning("config.json \"servers\" section could not be parsed - ignoring extra server profiles.", "server");
+			}
+		}
+
+		serverProfiles.push(buildCustomServerProfile());
+	}
+
+	function buildCustomServerProfile():ServerProfile
+	{
+		var label:String = settings.data.customServerLabel;
+
+		return {
+			id: "custom",
+			label: label != null && label.length > 0 ? label : "My Own Server",
+			chatEndpoint: settings.data.customServerChatEndpoint,
+			imageEndpoint: settings.data.customServerImageEndpoint,
+			diagnosticsEndpoint: "",
+			requiresApiKey: settings.data.customServerApiKey != null && settings.data.customServerApiKey.length > 0,
+			isOfficial: false
+		};
+	}
+
+	static function safeField(source:Dynamic, field:String, fallback:String):String
+	{
+		if (source == null)
+			return fallback;
+
+		var value:Dynamic = Reflect.field(source, field);
+		return value != null ? Std.string(value) : fallback;
+	}
+
+	public static function getServerProfiles():Array<ServerProfile>
+	{
+		return instance != null ? instance.serverProfiles.copy() : [];
+	}
+
+	public static function getActiveServerProfile():ServerProfile
+	{
+		if (instance == null)
+			return null;
+
+		for (profile in instance.serverProfiles)
+			if (profile.id == settings.data.activeServerProfileId)
+				return profile;
+
+		return instance.serverProfiles.length > 0 ? instance.serverProfiles[0] : null;
+	}
+
+	public static function setActiveServerProfile(id:String):Bool
+	{
+		if (instance == null)
+			return false;
+
+		var profile:ServerProfile = null;
+
+		for (candidate in instance.serverProfiles)
+			if (candidate.id == id)
+				profile = candidate;
+
+		if (profile == null)
+			return false;
+
+		if (StringTools.trim(profile.chatEndpoint).length > 0 && !Guard.isValidUrl(profile.chatEndpoint))
+		{
+			instance.logSecurityEvent('Rejected server profile "${profile.id}" - invalid chat endpoint');
+			return false;
+		}
+
+		if (StringTools.trim(profile.imageEndpoint).length > 0 && !Guard.isValidUrl(profile.imageEndpoint))
+		{
+			instance.logSecurityEvent('Rejected server profile "${profile.id}" - invalid image endpoint');
+			return false;
+		}
+
+		settings.update(function(d:SettingsData):Void d.activeServerProfileId = profile.id);
+		instance.applyServerProfile(profile);
+
+		return true;
+	}
+
+	function applyServerProfile(profile:ServerProfile):Void
+	{
+		ChatEngine.endpoint = profile.chatEndpoint;
+		ImageCreator.endpoint = profile.imageEndpoint;
+		diagnosticsEndpoint = profile.diagnosticsEndpoint;
+
+		if (profile.id == "custom")
+		{
+			ChatEngine.apiKey = settings.data.customServerApiKey;
+			ImageCreator.apiKey = settings.data.customServerApiKey;
+		}
+
+		isNetworkConfigTrusted = true;
+		setupSecurity();
+
+		if (ChatEngine.endpoint != null && ChatEngine.endpoint.length > 0)
+			Online.configureApi(ChatEngine.endpoint);
+
+		CrasherLog.addBreadcrumb('Switched to server profile "${profile.id}"', "server");
+	}
+
+	public static function setCustomServer(label:String, chatEndpoint:String, imageEndpoint:String, apiKey:String):Bool
+	{
+		if (instance == null)
+			return false;
+
+		var trimmedChat:String = StringTools.trim(chatEndpoint);
+		var trimmedImage:String = StringTools.trim(imageEndpoint);
+
+		if (trimmedChat.length > 0 && !Guard.isValidUrl(trimmedChat))
+		{
+			instance.logSecurityEvent("Rejected custom server - invalid chat endpoint");
+			return false;
+		}
+
+		if (trimmedImage.length > 0 && !Guard.isValidUrl(trimmedImage))
+		{
+			instance.logSecurityEvent("Rejected custom server - invalid image endpoint");
+			return false;
+		}
+
+		settings.update(function(d:SettingsData):Void
+		{
+			d.customServerLabel = label;
+			d.customServerChatEndpoint = trimmedChat;
+			d.customServerImageEndpoint = trimmedImage;
+			d.customServerApiKey = apiKey;
+		});
+
+		for (i in 0...instance.serverProfiles.length)
+			if (instance.serverProfiles[i].id == "custom")
+				instance.serverProfiles[i] = instance.buildCustomServerProfile();
+
+		CrasherLog.addBreadcrumb("Custom server profile updated", "server");
+
+		if (settings.data.activeServerProfileId == "custom")
+			return setActiveServerProfile("custom");
+
+		return true;
+	}
+
+	public static function isActiveServerReachable():Bool
+	{
+		return Online.apiOnline;
+	}
+
+	public static function getActiveServerLatencyMs():Float
+	{
+		return Online.apiLatencyMs;
 	}
 
 	function applyChatSection(section:Dynamic):Void
@@ -1002,6 +1227,11 @@ class Main extends Sprite
 
 		if (buildInfo != null)
 			lines.push('Build: ${Reflect.field(buildInfo, "version")} (${Reflect.field(buildInfo, "commit")}) [${Reflect.field(buildInfo, "environment")}]');
+
+		var activeServer:ServerProfile = getActiveServerProfile();
+
+		if (activeServer != null)
+			lines.push('Server: ${activeServer.label} (${isActiveServerReachable() ? "reachable" : "unreachable"})');
 
 		return lines.join(" | ");
 	}
