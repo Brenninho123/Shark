@@ -66,6 +66,7 @@ class Project extends HXProject
 
 		checkConfigJson();
 		checkDependencyIntegrity();
+		validateHmmAlignment();
 		validateAssetIntegrity();
 		recordBuildPhase("validation_complete");
 
@@ -275,6 +276,54 @@ class Project extends HXProject
 			buildWarnings.push('The following haxelibs appear to be missing locally: ${missing.join(", ")} - run `haxelib install <name>`.');
 	}
 
+	function validateHmmAlignment():Void
+	{
+		if (!FileSystem.exists("hmm.json"))
+			return;
+
+		try
+		{
+			var parsed:Dynamic = Json.parse(File.getContent("hmm.json"));
+			var dependencies:Array<Dynamic> = Reflect.field(parsed, "dependencies");
+
+			if (dependencies == null)
+				return;
+
+			var hmmNames:Array<String> = [];
+
+			for (dep in dependencies)
+			{
+				var name:String = Reflect.field(dep, "name");
+
+				if (name != null)
+					hmmNames.push(name);
+			}
+
+			var referencedNames:Array<String> = [for (lib in haxelibs) lib.name];
+			var missingFromHmm:Array<String> = [];
+
+			for (lib in referencedNames)
+				if (hmmNames.indexOf(lib) == -1 && missingFromHmm.indexOf(lib) == -1)
+					missingFromHmm.push(lib);
+
+			if (missingFromHmm.length > 0)
+				buildWarnings.push('Project.hxp references haxelib(s) not listed in hmm.json: ${missingFromHmm.join(", ")} - CI will not install them, and the build will fail with "Type not found" errors.');
+
+			var unusedInHmm:Int = 0;
+
+			for (name in hmmNames)
+				if (referencedNames.indexOf(name) == -1)
+					unusedInHmm++;
+
+			if (unusedInHmm > 0)
+				Log.info('$unusedInHmm haxelib(s) in hmm.json are not referenced by Project.hxp (fine for build-only tools like hxp/hxcpp, or git-based forks not yet wired up).');
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push("hmm.json exists but could not be parsed for alignment checking.");
+		}
+	}
+
 	function validateAssetIntegrity():Void
 	{
 		if (!FileSystem.exists("assets/images/icon.png"))
@@ -301,7 +350,7 @@ class Project extends HXProject
 			buildWarnings.push('assets/images totals ${formatBytes(totalSize)}, which is unusually large - consider trimming unused assets.');
 
 		if (uncompressedLargeTextures.length > 0)
-			buildWarnings.push('${uncompressedLargeTextures.length} texture(s) over ${formatBytes(ASTC_WARN_THRESHOLD_BYTES)} are still raw PNG for a mobile target - consider ASTC compression: ${uncompressedLargeTextures.join(", ")}');
+			buildWarnings.push('${uncompressedLargeTextures.length} texture(s) over ${formatBytes(ASTC_WARN_THRESHOLD_BYTES)} are still raw PNG for a mobile target - the astc-compressor haxelib is available for this, consider wiring it up: ${uncompressedLargeTextures.join(", ")}');
 	}
 
 	function scanDirectory(path:String, onFile:String->Int->Void):Void
@@ -499,6 +548,9 @@ class Project extends HXProject
 
 			if (target == IOS)
 				config.set("ios.setenv.ADMOB_APPID", envOr("SHARK_ADMOB_APPID_IOS", "ca-app-pub-3940256099942544~1458002511"));
+
+			addHaxelib("astc-compressor", pinned);
+			activeFeatures.push("ASTC texture compression (astc-compressor)");
 		}
 
 		if (target == LINUX)
