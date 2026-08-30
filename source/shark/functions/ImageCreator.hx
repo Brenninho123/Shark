@@ -368,8 +368,10 @@ class ImageCreator
 		var loader = new Loader();
 		var finished:Bool = false;
 		var timeoutTimer:Timer = null;
+		var onLoadComplete:Event->Void;
+		var onLoadError:IOErrorEvent->Void;
 
-		function onLoadComplete(e:Event):Void
+		onLoadComplete = function(e:Event):Void
 		{
 			if (finished)
 				return;
@@ -383,9 +385,9 @@ class ImageCreator
 
 			var bitmapData:BitmapData = cast(loader.content, openfl.display.Bitmap).bitmapData;
 			onComplete(bitmapData);
-		}
+		};
 
-		function onLoadError(e:IOErrorEvent):Void
+		onLoadError = function(e:IOErrorEvent):Void
 		{
 			if (finished)
 				return;
@@ -397,7 +399,7 @@ class ImageCreator
 
 			detachLoaderListeners(loader, onLoadComplete, onLoadError);
 			onError(e.text);
-		}
+		};
 
 		timeoutTimer = Timer.delay(function():Void
 		{
