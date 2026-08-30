@@ -15,7 +15,7 @@ enum abstract HapticStyle(Int)
 	var SELECTION = 3;
 	var SUCCESS = 4;
 	var WARNING = 5;
-	var ERROR = 6;
+	var FAILURE = 6;
 	var NOTIFICATION = 7;
 	var CUSTOM = 8;
 }
@@ -362,7 +362,7 @@ class Vibration
 			case SELECTION: "selectionChanged";
 			case SUCCESS: "notificationSuccess";
 			case WARNING: "notificationWarning";
-			case ERROR: "notificationError";
+			case FAILURE: "notificationError";
 			case NOTIFICATION: "notificationSuccess";
 			case CUSTOM: null;
 		}
@@ -378,7 +378,7 @@ class Vibration
 			case SELECTION: {durationMs: 8, amplitude: 0.2, pattern: [8]};
 			case SUCCESS: {durationMs: 80, amplitude: 0.7, pattern: [15, 50, 15]};
 			case WARNING: {durationMs: 130, amplitude: 0.8, pattern: [25, 80, 25]};
-			case ERROR: {durationMs: 165, amplitude: 1, pattern: [40, 60, 40, 60, 40]};
+			case FAILURE: {durationMs: 165, amplitude: 1, pattern: [40, 60, 40, 60, 40]};
 			case NOTIFICATION: {durationMs: 160, amplitude: 0.6, pattern: [20, 100, 20, 100, 20]};
 			case CUSTOM: {durationMs: 0, amplitude: 1, pattern: []};
 		}
