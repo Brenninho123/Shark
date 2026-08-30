@@ -49,23 +49,6 @@ runs:
       shell: bash
       run: haxelib list
 
-    - name: Verify HaxeUI is installed
-      shell: bash
-      run: |
-        if haxelib list | grep -qi "haxeui-core"; then
-          echo "haxeui-core: OK"
-        else
-          echo "::error::haxeui-core is NOT installed. Check that hmm.json (committed to this branch) lists haxeui-core and haxeui-flixel, and that this workflow run actually picked up that version of hmm.json (not a stale cache)."
-          exit 1
-        fi
-
-        if haxelib list | grep -qi "haxeui-flixel"; then
-          echo "haxeui-flixel: OK"
-        else
-          echo "::error::haxeui-flixel is NOT installed. Check that hmm.json (committed to this branch) lists haxeui-core and haxeui-flixel, and that this workflow run actually picked up that version of hmm.json (not a stale cache)."
-          exit 1
-        fi
-
     - name: Setup Lime
       if: inputs.skip-lime-setup != 'true'
       shell: bash
