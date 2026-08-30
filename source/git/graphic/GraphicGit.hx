@@ -341,6 +341,8 @@ class GraphicGit
 			shape.graphics.beginFill(color.rgb, alpha);
 
 			var rotationRad:Float = rotationDegrees * Math.PI / 180;
+			var firstX:Float = 0;
+			var firstY:Float = 0;
 
 			for (i in 0...sides)
 			{
@@ -349,12 +351,18 @@ class GraphicGit
 				var py:Float = radius + Math.sin(angle) * radius;
 
 				if (i == 0)
+				{
+					firstX = px;
+					firstY = py;
 					shape.graphics.moveTo(px, py);
+				}
 				else
+				{
 					shape.graphics.lineTo(px, py);
+				}
 			}
 
-			shape.graphics.closePath();
+			shape.graphics.lineTo(firstX, firstY);
 			shape.graphics.endFill();
 
 			var bitmapData = new BitmapData(size, size, true, 0x00000000);
@@ -382,6 +390,8 @@ class GraphicGit
 
 			var rotationRad:Float = rotationDegrees * Math.PI / 180;
 			var totalPoints:Int = points * 2;
+			var firstX:Float = 0;
+			var firstY:Float = 0;
 
 			for (i in 0...totalPoints)
 			{
@@ -392,12 +402,18 @@ class GraphicGit
 				var py:Float = outerRadius + Math.sin(angle) * r;
 
 				if (i == 0)
+				{
+					firstX = px;
+					firstY = py;
 					shape.graphics.moveTo(px, py);
+				}
 				else
+				{
 					shape.graphics.lineTo(px, py);
+				}
 			}
 
-			shape.graphics.closePath();
+			shape.graphics.lineTo(firstX, firstY);
 			shape.graphics.endFill();
 
 			var bitmapData = new BitmapData(size, size, true, 0x00000000);
