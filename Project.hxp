@@ -896,7 +896,15 @@ class Project extends HXProject
 
 	function setupIcon():Void
 	{
-		icons.push(new Icon("assets/images/icon.png"));
+		var iconPath:String = "assets/images/icon.png";
+
+		if (sharkEnvironment != "production" && FileSystem.exists("assets/images/icon_dev.png"))
+		{
+			iconPath = "assets/images/icon_dev.png";
+			activeFeatures.push("Dev icon variant");
+		}
+
+		icons.push(new Icon(iconPath));
 	}
 
 	function setupDefines():Void
@@ -941,13 +949,25 @@ class Project extends HXProject
 
 		haxedefs.set("SHARK_PLATFORM", "windows");
 
+		checkWindowsToolchain();
+		applyWindowsGdiWorkaroundIfRequested();
+
 		if (!debug)
 		{
 			haxeflags.push("-dce full");
 			haxeflags.push("-D no-traces");
 
 			if (envOr("SHARK_SIGN_WINDOWS", "") != "1")
+			{
 				buildWarnings.push("SHARK_SIGN_WINDOWS is not set to 1 - the Windows build will not be code-signed.");
+			}
+			else
+			{
+				var certPath:String = envOr("SHARK_WINDOWS_CERT_PATH", "");
+
+				if (certPath.length == 0 || !FileSystem.exists(certPath))
+					buildWarnings.push('SHARK_SIGN_WINDOWS=1 but SHARK_WINDOWS_CERT_PATH ("${certPath}") does not point to an existing file - signing will fail.');
+			}
 		}
 
 		cleanIfRequested("windows");
@@ -1088,6 +1108,35 @@ class Project extends HXProject
 			buildWarnings.push("SHARK_NOTARIZE_MAC is not set to 1 - the macOS build will not be notarized.");
 
 		cleanIfRequested("mac");
+	}
+
+	function checkWindowsToolchain():Void
+	{
+		try
+		{
+			var process = new sys.io.Process("where", ["cl"]);
+			var exitCode:Int = process.exitCode();
+			process.close();
+
+			if (exitCode != 0)
+				buildWarnings.push("cl.exe (MSVC compiler) was not found on PATH - the native build will fail. Make sure Visual Studio Build Tools are installed and this is running from a Developer Command Prompt (or that vcvarsall/setup-msvc has run first).");
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push("Could not check for cl.exe on PATH (the `where` command failed to run) - skipping MSVC toolchain check.");
+		}
+	}
+
+	function applyWindowsGdiWorkaroundIfRequested():Void
+	{
+		if (envOr("SHARK_ATTEMPT_GDI_FIX", "") != "1")
+			return;
+
+		haxedefs.set("WIN32_LEAN_AND_MEAN", "");
+		haxedefs.set("NOMINMAX", "");
+		haxedefs.set("NOGDI", "");
+
+		buildWarnings.push("SHARK_ATTEMPT_GDI_FIX=1 is active - defining NOGDI/WIN32_LEAN_AND_MEAN/NOMINMAX to test a known windows.h \"ERROR\" macro collision (see LogStyle_Impl_.h build failures). This is experimental: NOGDI excludes all GDI declarations from windows.h and could break window/OpenGL context creation if Lime's native backend needs them - verify the app still renders correctly before relying on this.");
 	}
 
 	function cleanIfRequested(platformFolder:String):Void
@@ -1370,6 +1419,16 @@ class Project extends HXProject
 		lines.push('Version: ${meta.version} (build ${meta.buildNumber})');
 		lines.push('Branch: $gitBranch, environment: $sharkEnvironment, target: $target, mode: ${debug ? "debug" : "release"}');
 		lines.push("");
+
+		if (target == WINDOWS)
+		{
+			lines.push("Known Windows issue: a windows.h \"ERROR\" macro collision can break the native build inside");
+			lines.push("Flixel/OpenFL generated headers (e.g. LogStyle_Impl_.h) with C2059/C2238 errors. To bisect which");
+			lines.push("native dependency triggers it, retry with SHARK_DISABLE_HXVLC=1 or SHARK_DISABLE_DISCORD_RPC=1.");
+			lines.push("To experimentally test the documented NOGDI fix, retry with SHARK_ATTEMPT_GDI_FIX=1 (see warnings).");
+			lines.push("");
+		}
+
 		lines.push("Build phases:");
 
 		for (phase in buildPhases)
