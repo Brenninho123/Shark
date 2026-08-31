@@ -151,7 +151,7 @@ class StorageUtil
 		return null;
 	}
 
-	static function hasExternalStoragePermission():Bool
+	public static function hasExternalStoragePermission():Bool
 	{
 		var candidates:Array<String> = ["extension.androidtools.permissions.Permissions", "extension.androidtools.Permissions"];
 		var methodNames:Array<String> = ["hasPermission", "checkPermission"];
@@ -183,7 +183,51 @@ class StorageUtil
 
 		return true;
 	}
+
+	static function requestExternalStoragePermissionNative(onResult:Bool->Void):Bool
+	{
+		var candidates:Array<String> = ["extension.androidtools.permissions.Permissions", "extension.androidtools.Permissions"];
+		var methodNames:Array<String> = ["requestPermission", "requestPermissions"];
+
+		for (className in candidates)
+		{
+			var cls:Dynamic = Type.resolveClass(className);
+
+			if (cls == null)
+				continue;
+
+			for (methodName in methodNames)
+			{
+				var fn:Dynamic = Reflect.field(cls, methodName);
+
+				if (fn == null || !Reflect.isFunction(fn))
+					continue;
+
+				try
+				{
+					Reflect.callMethod(cls, fn, ["android.permission.WRITE_EXTERNAL_STORAGE", onResult]);
+					return true;
+				}
+				catch (e:Dynamic) {}
+			}
+		}
+
+		return false;
+	}
 	#end
+
+	public static function requestExternalStoragePermission(onResult:Bool->Void):Void
+	{
+		#if android
+		if (requestExternalStoragePermissionNative(onResult))
+			return;
+
+		CrasherLog.logWarning("No permission-request binding found in extension-androidtools - assuming current status.", "storage");
+		onResult(hasExternalStoragePermission());
+		#else
+		onResult(true);
+		#end
+	}
 
 	public static function getContentPath(location:StorageLocation = DATA):String
 	{
