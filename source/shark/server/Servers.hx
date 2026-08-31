@@ -248,6 +248,7 @@ class Servers
 			chatEndpoint: chatEndpoint,
 			imageEndpoint: "",
 			diagnosticsEndpoint: "",
+			multiplayerEndpoint: "",
 			requiresApiKey: false,
 			isOfficial: false
 		}, onResult);
