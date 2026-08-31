@@ -2,6 +2,7 @@ import hxp.*;
 import lime.tools.*;
 import haxe.Json;
 import haxe.io.Path;
+import haxe.crypto.Md5;
 import sys.FileSystem;
 import sys.io.File;
 
@@ -68,6 +69,12 @@ class Project extends HXProject
 		checkDependencyIntegrity();
 		validateHmmAlignment();
 		validateAssetIntegrity();
+		checkLocalizationCompleteness();
+		writeThirdPartyNotices();
+
+		if (!debug || envOr("SHARK_FORCE_ASSET_MANIFEST", "") == "1")
+			processAssetManifest();
+
 		recordBuildPhase("validation_complete");
 
 		switch (target)
@@ -376,6 +383,140 @@ class Project extends HXProject
 		}
 	}
 
+	function processAssetManifest():Void
+	{
+		var manifest:Array<{path:String, size:Int, checksum:String}> = [];
+		var skipPaths:Array<String> = ["assets/data/asset_manifest.json", "assets/data/build_info.json"];
+
+		scanDirectory("assets", function(path:String, size:Int):Void
+		{
+			if (skipPaths.indexOf(path) != -1)
+				return;
+
+			try
+			{
+				manifest.push({path: path, size: size, checksum: Md5.make(File.getBytes(path)).toHex()});
+			}
+			catch (e:Dynamic) {}
+		});
+
+		writeAssetManifestFile(manifest);
+		checkForDuplicateAssets(manifest);
+	}
+
+	function writeAssetManifestFile(manifest:Array<{path:String, size:Int, checksum:String}>):Void
+	{
+		try
+		{
+			if (!FileSystem.exists("assets/data"))
+				FileSystem.createDirectory("assets/data");
+
+			File.saveContent("assets/data/asset_manifest.json", Json.stringify(manifest, null, "\t"));
+			activeFeatures.push('Asset manifest (${manifest.length} file(s))');
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push("Failed to write assets/data/asset_manifest.json.");
+		}
+	}
+
+	function checkForDuplicateAssets(manifest:Array<{path:String, size:Int, checksum:String}>):Void
+	{
+		var byChecksum:Map<String, Array<String>> = new Map();
+
+		for (entry in manifest)
+		{
+			if (!byChecksum.exists(entry.checksum))
+				byChecksum.set(entry.checksum, []);
+
+			byChecksum.get(entry.checksum).push(entry.path);
+		}
+
+		var duplicateGroups:Int = 0;
+
+		for (checksum => paths in byChecksum)
+		{
+			if (paths.length <= 1)
+				continue;
+
+			duplicateGroups++;
+			buildWarnings.push('Duplicate asset content across ${paths.length} files: ${paths.join(", ")}');
+		}
+
+		if (duplicateGroups > 0)
+			Log.info('$duplicateGroups group(s) of duplicate asset content found - see warnings above.');
+	}
+
+	function checkLocalizationCompleteness():Void
+	{
+		var localesPath:String = "assets/data/locales";
+
+		if (!FileSystem.exists(localesPath) || !FileSystem.isDirectory(localesPath))
+			return;
+
+		var referenceKey:String = "en";
+		var referencePath:String = '$localesPath/$referenceKey.json';
+
+		if (!FileSystem.exists(referencePath))
+			return;
+
+		var referenceKeys:Array<String>;
+
+		try
+		{
+			referenceKeys = Reflect.fields(Json.parse(File.getContent(referencePath)));
+		}
+		catch (e:Dynamic)
+		{
+			buildWarnings.push('Could not parse $referencePath for localization completeness checking.');
+			return;
+		}
+
+		for (entry in FileSystem.readDirectory(localesPath))
+		{
+			if (!StringTools.endsWith(entry, ".json") || entry == '$referenceKey.json')
+				continue;
+
+			var localeCode:String = entry.substr(0, entry.length - 5);
+			var localePath:String = '$localesPath/$entry';
+
+			try
+			{
+				var localeKeys:Array<String> = Reflect.fields(Json.parse(File.getContent(localePath)));
+				var missing:Array<String> = [];
+
+				for (key in referenceKeys)
+					if (localeKeys.indexOf(key) == -1)
+						missing.push(key);
+
+				if (missing.length > 0)
+					buildWarnings.push('Locale "$localeCode" is missing ${missing.length} key(s) from "$referenceKey": ${missing.join(", ")}');
+			}
+			catch (e:Dynamic)
+			{
+				buildWarnings.push('Locale "$localeCode" has invalid JSON.');
+			}
+		}
+	}
+
+	function writeThirdPartyNotices():Void
+	{
+		var pinned:Map<String, String> = loadPinnedVersions();
+		var lines:Array<String> = ["Shark - Third-Party Notices", "", 'Generated: ${Date.now().toString()}', ""];
+
+		for (lib in haxelibs)
+		{
+			var version:String = pinned.exists(lib.name) ? pinned.get(lib.name) : "latest";
+			lines.push('- ${lib.name} ($version)');
+		}
+
+		try
+		{
+			File.saveContent("THIRD_PARTY_NOTICES.txt", lines.join("\n"));
+		}
+		catch (e:Dynamic) {}
+	}
+
 	function formatDecimal(value:Float, decimals:Int):String
 	{
 		var factor:Float = Math.pow(10, decimals);
@@ -536,15 +677,6 @@ class Project extends HXProject
 
 		if (target == ANDROID || target == IOS)
 		{
-			addHaxelib("extension-admob", pinned);
-			activeFeatures.push("AdMob");
-
-			if (target == ANDROID)
-				config.set("android.setenv.ADMOB_APPID", envOr("SHARK_ADMOB_APPID_ANDROID", "ca-app-pub-3940256099942544~3347511713"));
-
-			if (target == IOS)
-				config.set("ios.setenv.ADMOB_APPID", envOr("SHARK_ADMOB_APPID_IOS", "ca-app-pub-3940256099942544~1458002511"));
-
 			addHaxelib("astc-compressor", pinned);
 			activeFeatures.push("ASTC texture compression (astc-compressor)");
 		}
