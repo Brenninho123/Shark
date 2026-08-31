@@ -46,7 +46,6 @@ import shark.backend.Mods;
 import shark.mobile.utils.TouchUtil;
 import shark.modding.Module;
 import shark.modding.ModuleHandler;
-import shark.api.admob.AdMobClient;
 import shark.api.google.GoogleClient;
 import shark.api.newgrounds.NewClient;
 import shark.world.Country;
@@ -653,7 +652,6 @@ class Main extends Sprite
 	var newgroundsEnabled:Bool = false;
 	var newgroundsAppId:String = "";
 	var googlePlayGamesEnabled:Bool = false;
-	var admobEnabled:Bool = false;
 	var countryDetectionEnabled:Bool = false;
 
 	function applyPlatformsSection(section:Dynamic):Void
@@ -672,9 +670,6 @@ class Main extends Sprite
 
 		if (section.googlePlayGames != null && section.googlePlayGames.enabled != null)
 			googlePlayGamesEnabled = section.googlePlayGames.enabled;
-
-		if (section.admob != null && section.admob.enabled != null)
-			admobEnabled = section.admob.enabled;
 
 		if (section.countryDetection != null && section.countryDetection.enabled != null)
 			countryDetectionEnabled = section.countryDetection.enabled;
@@ -704,20 +699,6 @@ class Main extends Sprite
 			catch (e:Dynamic)
 			{
 				CrasherLog.logWarning('Google Play Games failed to initialize: ${Std.string(e)}', "platforms");
-			}
-		}
-		#end
-
-		#if (android || ios)
-		if (admobEnabled)
-		{
-			try
-			{
-				AdMobClient.initialize();
-			}
-			catch (e:Dynamic)
-			{
-				CrasherLog.logWarning('AdMob failed to initialize: ${Std.string(e)}', "platforms");
 			}
 		}
 		#end
