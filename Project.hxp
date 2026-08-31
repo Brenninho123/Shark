@@ -757,6 +757,14 @@ class Project extends HXProject
 		includeAssets("assets/images", "assets/images");
 		includeAssets("assets/data", "assets/data");
 
+		if (FileSystem.exists("assets/sounds") && FileSystem.readDirectory("assets/sounds").length > 0)
+			includeAssets("assets/sounds", "assets/sounds");
+		else
+			buildWarnings.push("assets/sounds is missing or empty - no sound effects or music will be bundled.");
+
+		if (FileSystem.exists("assets/music") && FileSystem.readDirectory("assets/music").length > 0)
+			includeAssets("assets/music", "assets/music");
+
 		if (FileSystem.exists("assets/fonts") && FileSystem.readDirectory("assets/fonts").length > 0)
 			includeAssets("assets/fonts", "assets/fonts");
 
