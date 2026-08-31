@@ -2,11 +2,13 @@ package shark.mobile;
 
 import openfl.display.BitmapData;
 import openfl.display.PNGEncoderOptions;
+import openfl.geom.Matrix;
 import openfl.utils.ByteArray;
 import lime.system.System;
+import shark.ui.debug.CrasherLog;
 import shark.ui.security.Guard;
 
-#if (android || ios)
+#if sys
 import sys.FileSystem;
 import sys.io.File;
 import haxe.Json;
@@ -25,10 +27,17 @@ class StorageUtil
 	public static inline var CONTENT_FOLDER:String = "content";
 	public static var maxStoredImages:Int = 200;
 	public static var maxStorageMB:Float = 250;
+	public static var generateThumbnails:Bool = true;
+	public static var thumbnailMaxDimension:Int = 256;
+
+	static inline var THUMBNAIL_SUFFIX:String = "_thumb.png";
+
+	static var cachedInfo:Array<StoredImageInfo>;
+	static var cacheValid:Bool = false;
 
 	public static function isSupported():Bool
 	{
-		#if (android || ios)
+		#if sys
 		return true;
 		#else
 		return false;
@@ -47,7 +56,7 @@ class StorageUtil
 
 	public static function ensureContentFolder():Bool
 	{
-		#if (android || ios)
+		#if sys
 		var path:String = getContentPath();
 
 		try
@@ -59,6 +68,7 @@ class StorageUtil
 		}
 		catch (e:Dynamic)
 		{
+			CrasherLog.logWarning('Failed to create content folder: ${Std.string(e)}', "storage");
 			return false;
 		}
 		#else
@@ -68,8 +78,8 @@ class StorageUtil
 
 	public static function saveImage(bitmapData:BitmapData, filename:String, onComplete:String->Void, onError:String->Void, ?prompt:String):Void
 	{
-		#if (android || ios)
-		if (bitmapData == null)
+		#if sys
+		if (bitmapData == null || bitmapData.width <= 0 || bitmapData.height <= 0)
 		{
 			onError("No image data to save");
 			return;
@@ -99,20 +109,76 @@ class StorageUtil
 			File.saveBytes(fullPath, encoded);
 			writeMetadata(safeName, prompt);
 
+			if (generateThumbnails)
+				saveThumbnail(bitmapData, safeName);
+
+			invalidateCache();
+
 			onComplete(fullPath);
 		}
 		catch (e:Dynamic)
 		{
+			CrasherLog.logWarning('Failed to save image "$safeName": ${Std.string(e)}', "storage");
 			onError(Std.string(e));
 		}
 		#else
-		onError("Image storage is only available on mobile targets");
+		onError("Image storage is only available on this target");
 		#end
+	}
+
+	static function saveThumbnail(source:BitmapData, safeName:String):Void
+	{
+		#if sys
+		try
+		{
+			var thumbnail:BitmapData = createThumbnail(source, thumbnailMaxDimension);
+			var encoded:ByteArray = thumbnail.encode(thumbnail.rect, new PNGEncoderOptions());
+			File.saveBytes(getContentPath() + "/" + safeName + THUMBNAIL_SUFFIX, encoded);
+		}
+		catch (e:Dynamic)
+		{
+			CrasherLog.logWarning('Failed to generate thumbnail for "$safeName": ${Std.string(e)}', "storage");
+		}
+		#end
+	}
+
+	static function createThumbnail(source:BitmapData, maxDimension:Int):BitmapData
+	{
+		var scale:Float = Math.min(1, maxDimension / Math.max(source.width, source.height));
+		var thumbWidth:Int = Std.int(Math.max(1, source.width * scale));
+		var thumbHeight:Int = Std.int(Math.max(1, source.height * scale));
+
+		var thumbnail:BitmapData = new BitmapData(thumbWidth, thumbHeight, true, 0x00000000);
+		var matrix:Matrix = new Matrix();
+		matrix.scale(scale, scale);
+		thumbnail.draw(source, matrix, null, null, null, true);
+
+		return thumbnail;
+	}
+
+	public static function getThumbnailPath(filename:String):String
+	{
+		var safeName:String = stripPngExtension(sanitizeFilename(filename));
+		return getContentPath() + "/" + safeName + THUMBNAIL_SUFFIX;
+	}
+
+	public static function hasThumbnail(filename:String):Bool
+	{
+		#if sys
+		return FileSystem.exists(getThumbnailPath(filename));
+		#else
+		return false;
+		#end
+	}
+
+	static function stripPngExtension(name:String):String
+	{
+		return StringTools.endsWith(name.toLowerCase(), ".png") ? name.substr(0, name.length - 4) : name;
 	}
 
 	static function writeMetadata(safeName:String, ?prompt:String):Void
 	{
-		#if (android || ios)
+		#if sys
 		try
 		{
 			var metadata = {
@@ -122,13 +188,16 @@ class StorageUtil
 
 			File.saveContent(getContentPath() + "/" + safeName + ".json", Json.stringify(metadata));
 		}
-		catch (e:Dynamic) {}
+		catch (e:Dynamic)
+		{
+			CrasherLog.logWarning('Failed to write metadata for "$safeName": ${Std.string(e)}', "storage");
+		}
 		#end
 	}
 
 	static function readMetadata(safeName:String):{?prompt:String, ?savedAt:Float}
 	{
-		#if (android || ios)
+		#if sys
 		try
 		{
 			var metaPath:String = getContentPath() + "/" + safeName + ".json";
@@ -147,9 +216,15 @@ class StorageUtil
 		#end
 	}
 
+	static function invalidateCache():Void
+	{
+		cacheValid = false;
+		cachedInfo = null;
+	}
+
 	public static function listSavedImages():Array<String>
 	{
-		#if (android || ios)
+		#if sys
 		var path:String = getContentPath();
 
 		if (!FileSystem.exists(path))
@@ -157,7 +232,8 @@ class StorageUtil
 
 		return FileSystem.readDirectory(path).filter(function(name:String):Bool
 		{
-			return StringTools.endsWith(name.toLowerCase(), ".png");
+			var lower:String = name.toLowerCase();
+			return StringTools.endsWith(lower, ".png") && !StringTools.endsWith(lower, THUMBNAIL_SUFFIX);
 		});
 		#else
 		return [];
@@ -166,12 +242,15 @@ class StorageUtil
 
 	public static function listSavedImagesWithMetadata():Array<StoredImageInfo>
 	{
+		if (cacheValid && cachedInfo != null)
+			return cachedInfo.copy();
+
 		var result:Array<StoredImageInfo> = [];
 
-		#if (android || ios)
+		#if sys
 		for (filename in listSavedImages())
 		{
-			var safeName:String = filename.substr(0, filename.length - 4);
+			var safeName:String = stripPngExtension(filename);
 			var fullPath:String = getContentPath() + "/" + filename;
 
 			var sizeBytes:Int = 0;
@@ -201,7 +280,10 @@ class StorageUtil
 		});
 		#end
 
-		return result;
+		cachedInfo = result;
+		cacheValid = true;
+
+		return result.copy();
 	}
 
 	public static function getStorageUsageMB():Float
@@ -216,13 +298,13 @@ class StorageUtil
 
 	static function enforceQuota():Void
 	{
-		#if (android || ios)
+		#if sys
 		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata();
 
 		while (images.length >= maxStoredImages)
 		{
 			var oldest:StoredImageInfo = images.pop();
-			deleteImage(oldest.filename.substr(0, oldest.filename.length - 4));
+			deleteImage(stripPngExtension(oldest.filename));
 		}
 
 		var usageMB:Float = getStorageUsageMB();
@@ -230,7 +312,7 @@ class StorageUtil
 		while (usageMB > maxStorageMB && images.length > 0)
 		{
 			var oldest:StoredImageInfo = images.pop();
-			deleteImage(oldest.filename.substr(0, oldest.filename.length - 4));
+			deleteImage(stripPngExtension(oldest.filename));
 			usageMB -= oldest.sizeBytes / 1024 / 1024;
 		}
 		#end
@@ -238,10 +320,18 @@ class StorageUtil
 
 	public static function deleteImage(filename:String):Bool
 	{
-		#if (android || ios)
+		#if sys
 		var safeName:String = sanitizeFilename(filename);
+
+		if (!Guard.isSafeFilename(safeName + ".png"))
+		{
+			CrasherLog.logSecurity('Rejected delete for unsafe filename "$filename"', "storage");
+			return false;
+		}
+
 		var imagePath:String = getContentPath() + "/" + safeName + ".png";
 		var metaPath:String = getContentPath() + "/" + safeName + ".json";
+		var thumbPath:String = getContentPath() + "/" + safeName + THUMBNAIL_SUFFIX;
 
 		try
 		{
@@ -256,10 +346,16 @@ class StorageUtil
 			if (FileSystem.exists(metaPath))
 				FileSystem.deleteFile(metaPath);
 
+			if (FileSystem.exists(thumbPath))
+				FileSystem.deleteFile(thumbPath);
+
+			invalidateCache();
+
 			return deleted;
 		}
 		catch (e:Dynamic)
 		{
+			CrasherLog.logWarning('Failed to delete image "$safeName": ${Std.string(e)}', "storage");
 			return false;
 		}
 		#else
@@ -271,12 +367,14 @@ class StorageUtil
 	{
 		var count:Int = 0;
 
-		#if (android || ios)
+		#if sys
 		for (filename in listSavedImages())
 		{
-			deleteImage(filename.substr(0, filename.length - 4));
+			deleteImage(stripPngExtension(filename));
 			count++;
 		}
+
+		invalidateCache();
 		#end
 
 		return count;
@@ -298,14 +396,22 @@ class StorageUtil
 
 	public static function renameImage(oldFilename:String, newFilename:String):Bool
 	{
-		#if (android || ios)
+		#if sys
 		var oldSafeName:String = sanitizeFilename(oldFilename);
 		var newSafeName:String = sanitizeFilename(newFilename);
+
+		if (!Guard.isSafeFilename(newSafeName + ".png"))
+		{
+			CrasherLog.logSecurity('Rejected rename to unsafe filename "$newFilename"', "storage");
+			return false;
+		}
 
 		var oldImagePath:String = getContentPath() + "/" + oldSafeName + ".png";
 		var newImagePath:String = getContentPath() + "/" + newSafeName + ".png";
 		var oldMetaPath:String = getContentPath() + "/" + oldSafeName + ".json";
 		var newMetaPath:String = getContentPath() + "/" + newSafeName + ".json";
+		var oldThumbPath:String = getContentPath() + "/" + oldSafeName + THUMBNAIL_SUFFIX;
+		var newThumbPath:String = getContentPath() + "/" + newSafeName + THUMBNAIL_SUFFIX;
 
 		if (!FileSystem.exists(oldImagePath))
 			return false;
@@ -317,10 +423,16 @@ class StorageUtil
 			if (FileSystem.exists(oldMetaPath))
 				FileSystem.rename(oldMetaPath, newMetaPath);
 
+			if (FileSystem.exists(oldThumbPath))
+				FileSystem.rename(oldThumbPath, newThumbPath);
+
+			invalidateCache();
+
 			return true;
 		}
 		catch (e:Dynamic)
 		{
+			CrasherLog.logWarning('Failed to rename image "$oldSafeName" to "$newSafeName": ${Std.string(e)}', "storage");
 			return false;
 		}
 		#else
@@ -330,8 +442,12 @@ class StorageUtil
 
 	public static function exportImageBytes(filename:String):haxe.io.Bytes
 	{
-		#if (android || ios)
+		#if sys
 		var safeName:String = sanitizeFilename(filename);
+
+		if (!Guard.isSafeFilename(safeName + ".png"))
+			return null;
+
 		var path:String = getContentPath() + "/" + safeName + ".png";
 
 		if (!FileSystem.exists(path))
@@ -343,6 +459,7 @@ class StorageUtil
 		}
 		catch (e:Dynamic)
 		{
+			CrasherLog.logWarning('Failed to export image "$safeName": ${Std.string(e)}', "storage");
 			return null;
 		}
 		#else
@@ -360,6 +477,26 @@ class StorageUtil
 	{
 		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata();
 		return images.length > 0 ? images[0] : null;
+	}
+
+	public static function getStatusSummary():String
+	{
+		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata();
+		var usageMB:Float = getStorageUsageMB();
+
+		return 'StorageUtil: ${images.length}/$maxStoredImages images, ${formatDecimal(usageMB, 1)}/${formatDecimal(maxStorageMB, 1)}MB';
+	}
+
+	static function formatDecimal(value:Float, decimals:Int):String
+	{
+		var factor:Float = Math.pow(10, decimals);
+		var rounded:Float = Math.round(value * factor) / factor;
+		var text:String = Std.string(rounded);
+
+		if (text.indexOf(".") == -1)
+			text += ".0";
+
+		return text;
 	}
 
 	static function sanitizeFilename(filename:String):String
