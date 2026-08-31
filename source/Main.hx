@@ -855,7 +855,7 @@ class Main extends Sprite
 
 	function setupGame():Void
 	{
-		var game = new FlxGame(0, 0, MainMenuState, 60, 60, true);
+		var game = new FlxGame(0, 0, shark.menus.intro.IntroState, 60, 60, true);
 		addChild(game);
 
 		FlxG.autoPause = true;
