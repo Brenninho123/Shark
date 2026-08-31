@@ -17,6 +17,7 @@ typedef ServerProfile = {
 	chatEndpoint:String,
 	imageEndpoint:String,
 	diagnosticsEndpoint:String,
+	multiplayerEndpoint:String,
 	requiresApiKey:Bool,
 	isOfficial:Bool
 }
@@ -47,6 +48,7 @@ class Servers
 		var config:Dynamic = Paths.getJson("config");
 		var network:Dynamic = config != null ? Reflect.field(config, "network") : null;
 		var officialDiagnostics:String = network != null ? safeField(network, "diagnosticsEndpoint", "") : "";
+		var officialMultiplayer:String = network != null ? safeField(network, "multiplayerEndpoint", "") : "";
 
 		profiles.push({
 			id: "official",
@@ -54,6 +56,7 @@ class Servers
 			chatEndpoint: ChatEngine.endpoint,
 			imageEndpoint: ImageCreator.endpoint,
 			diagnosticsEndpoint: officialDiagnostics,
+			multiplayerEndpoint: officialMultiplayer,
 			requiresApiKey: true,
 			isOfficial: true
 		});
@@ -77,6 +80,7 @@ class Servers
 						chatEndpoint: safeField(entry, "chatEndpoint", ""),
 						imageEndpoint: safeField(entry, "imageEndpoint", ""),
 						diagnosticsEndpoint: safeField(entry, "diagnosticsEndpoint", ""),
+						multiplayerEndpoint: safeField(entry, "multiplayerEndpoint", ""),
 						requiresApiKey: Reflect.hasField(entry, "requiresApiKey") ? Reflect.field(entry, "requiresApiKey") == true : true,
 						isOfficial: false
 					});
@@ -101,6 +105,7 @@ class Servers
 			chatEndpoint: Main.settings.data.customServerChatEndpoint,
 			imageEndpoint: Main.settings.data.customServerImageEndpoint,
 			diagnosticsEndpoint: "",
+			multiplayerEndpoint: "",
 			requiresApiKey: Main.settings.data.customServerApiKey != null && Main.settings.data.customServerApiKey.length > 0,
 			isOfficial: false
 		};
