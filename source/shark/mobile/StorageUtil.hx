@@ -5,6 +5,7 @@ import openfl.display.PNGEncoderOptions;
 import openfl.geom.Matrix;
 import openfl.utils.ByteArray;
 import lime.system.System;
+import shark.modding.Module;
 import shark.ui.debug.CrasherLog;
 import shark.ui.security.Guard;
 
@@ -22,6 +23,13 @@ typedef StoredImageInfo = {
 	?savedAt:Float
 }
 
+enum abstract StorageLocation(Int)
+{
+	var DATA = 0;
+	var EXTERNAL = 1;
+	var MODS = 2;
+}
+
 class StorageUtil
 {
 	public static inline var CONTENT_FOLDER:String = "content";
@@ -32,8 +40,9 @@ class StorageUtil
 
 	static inline var THUMBNAIL_SUFFIX:String = "_thumb.png";
 
-	static var cachedInfo:Array<StoredImageInfo>;
-	static var cacheValid:Bool = false;
+	static var cachedInfo:Map<Int, Array<StoredImageInfo>> = new Map();
+	static var cachedExternalPath:String;
+	static var externalPathChecked:Bool = false;
 
 	public static function isSupported():Bool
 	{
@@ -44,20 +53,147 @@ class StorageUtil
 		#end
 	}
 
-	public static function getContentPath():String
+	public static function isExternalStorageAvailable():Bool
 	{
-		var base:String = System.applicationStorageDirectory;
-
-		if (!StringTools.endsWith(base, "/") && !StringTools.endsWith(base, "\\"))
-			base += "/";
-
-		return base + CONTENT_FOLDER;
+		#if android
+		return resolveExternalStoragePath() != null;
+		#else
+		return false;
+		#end
 	}
 
-	public static function ensureContentFolder():Bool
+	public static function getBasePath(location:StorageLocation = DATA):String
+	{
+		if (location == EXTERNAL)
+		{
+			#if android
+			var external:String = resolveExternalStoragePath();
+
+			if (external != null)
+				return stripTrailingSlash(external);
+			#end
+
+			return getBasePath(DATA);
+		}
+
+		if (location == MODS)
+		{
+			try
+			{
+				return stripTrailingSlash(Module.getModsDirectory());
+			}
+			catch (e:Dynamic)
+			{
+				return getBasePath(DATA) + "/mods";
+			}
+		}
+
+		return stripTrailingSlash(System.applicationStorageDirectory);
+	}
+
+	static function stripTrailingSlash(path:String):String
+	{
+		if (path == null)
+			return "";
+
+		if (StringTools.endsWith(path, "/") || StringTools.endsWith(path, "\\"))
+			return path.substr(0, path.length - 1);
+
+		return path;
+	}
+
+	#if android
+	static function resolveExternalStoragePath():String
+	{
+		if (externalPathChecked)
+			return cachedExternalPath;
+
+		externalPathChecked = true;
+
+		var candidates:Array<String> = [
+			"extension.androidtools.device.Device",
+			"extension.androidtools.Device",
+			"extension.androidtools.device.Storage",
+			"extension.androidtools.Storage"
+		];
+
+		var methodNames:Array<String> = ["getExternalFilesDir", "getExternalStorageDirectory", "getExternalStoragePath"];
+
+		for (className in candidates)
+		{
+			var cls:Dynamic = Type.resolveClass(className);
+
+			if (cls == null)
+				continue;
+
+			for (methodName in methodNames)
+			{
+				var fn:Dynamic = Reflect.field(cls, methodName);
+
+				if (fn == null || !Reflect.isFunction(fn))
+					continue;
+
+				try
+				{
+					var result:Dynamic = Reflect.callMethod(cls, fn, []);
+
+					if (result != null)
+					{
+						cachedExternalPath = Std.string(result);
+						return cachedExternalPath;
+					}
+				}
+				catch (e:Dynamic) {}
+			}
+		}
+
+		CrasherLog.logWarning("No external storage binding found in extension-androidtools - falling back to internal storage.", "storage");
+		return null;
+	}
+
+	static function hasExternalStoragePermission():Bool
+	{
+		var candidates:Array<String> = ["extension.androidtools.permissions.Permissions", "extension.androidtools.Permissions"];
+		var methodNames:Array<String> = ["hasPermission", "checkPermission"];
+
+		for (className in candidates)
+		{
+			var cls:Dynamic = Type.resolveClass(className);
+
+			if (cls == null)
+				continue;
+
+			for (methodName in methodNames)
+			{
+				var fn:Dynamic = Reflect.field(cls, methodName);
+
+				if (fn == null || !Reflect.isFunction(fn))
+					continue;
+
+				try
+				{
+					var result:Dynamic = Reflect.callMethod(cls, fn, ["android.permission.WRITE_EXTERNAL_STORAGE"]);
+
+					if (result != null)
+						return result == true;
+				}
+				catch (e:Dynamic) {}
+			}
+		}
+
+		return true;
+	}
+	#end
+
+	public static function getContentPath(location:StorageLocation = DATA):String
+	{
+		return getBasePath(location) + "/" + CONTENT_FOLDER;
+	}
+
+	public static function ensureFolder(location:StorageLocation = DATA):Bool
 	{
 		#if sys
-		var path:String = getContentPath();
+		var path:String = location == MODS ? getBasePath(MODS) : getContentPath(location);
 
 		try
 		{
@@ -68,7 +204,7 @@ class StorageUtil
 		}
 		catch (e:Dynamic)
 		{
-			CrasherLog.logWarning('Failed to create content folder: ${Std.string(e)}', "storage");
+			CrasherLog.logWarning('Failed to create folder for $location: ${Std.string(e)}', "storage");
 			return false;
 		}
 		#else
@@ -76,7 +212,13 @@ class StorageUtil
 		#end
 	}
 
-	public static function saveImage(bitmapData:BitmapData, filename:String, onComplete:String->Void, onError:String->Void, ?prompt:String):Void
+	public static function ensureContentFolder(location:StorageLocation = DATA):Bool
+	{
+		return ensureFolder(location);
+	}
+
+	public static function saveImage(bitmapData:BitmapData, filename:String, onComplete:String->Void, onError:String->Void, ?prompt:String,
+			location:StorageLocation = DATA):Void
 	{
 		#if sys
 		if (bitmapData == null || bitmapData.width <= 0 || bitmapData.height <= 0)
@@ -85,7 +227,15 @@ class StorageUtil
 			return;
 		}
 
-		if (!ensureContentFolder())
+		#if android
+		if (location == EXTERNAL && !hasExternalStoragePermission())
+		{
+			CrasherLog.logWarning("External storage permission not granted - saving to internal storage instead.", "storage");
+			location = DATA;
+		}
+		#end
+
+		if (!ensureFolder(location))
 		{
 			onError("Could not create content folder");
 			return;
@@ -101,18 +251,18 @@ class StorageUtil
 
 		try
 		{
-			enforceQuota();
+			enforceQuota(location);
 
-			var fullPath:String = getContentPath() + "/" + safeName + ".png";
+			var fullPath:String = getContentPath(location) + "/" + safeName + ".png";
 			var encoded:ByteArray = bitmapData.encode(bitmapData.rect, new PNGEncoderOptions());
 
 			File.saveBytes(fullPath, encoded);
-			writeMetadata(safeName, prompt);
+			writeMetadata(safeName, location, prompt);
 
 			if (generateThumbnails)
-				saveThumbnail(bitmapData, safeName);
+				saveThumbnail(bitmapData, safeName, location);
 
-			invalidateCache();
+			invalidateCache(location);
 
 			onComplete(fullPath);
 		}
@@ -126,14 +276,14 @@ class StorageUtil
 		#end
 	}
 
-	static function saveThumbnail(source:BitmapData, safeName:String):Void
+	static function saveThumbnail(source:BitmapData, safeName:String, location:StorageLocation):Void
 	{
 		#if sys
 		try
 		{
 			var thumbnail:BitmapData = createThumbnail(source, thumbnailMaxDimension);
 			var encoded:ByteArray = thumbnail.encode(thumbnail.rect, new PNGEncoderOptions());
-			File.saveBytes(getContentPath() + "/" + safeName + THUMBNAIL_SUFFIX, encoded);
+			File.saveBytes(getContentPath(location) + "/" + safeName + THUMBNAIL_SUFFIX, encoded);
 		}
 		catch (e:Dynamic)
 		{
@@ -156,16 +306,16 @@ class StorageUtil
 		return thumbnail;
 	}
 
-	public static function getThumbnailPath(filename:String):String
+	public static function getThumbnailPath(filename:String, location:StorageLocation = DATA):String
 	{
 		var safeName:String = stripPngExtension(sanitizeFilename(filename));
-		return getContentPath() + "/" + safeName + THUMBNAIL_SUFFIX;
+		return getContentPath(location) + "/" + safeName + THUMBNAIL_SUFFIX;
 	}
 
-	public static function hasThumbnail(filename:String):Bool
+	public static function hasThumbnail(filename:String, location:StorageLocation = DATA):Bool
 	{
 		#if sys
-		return FileSystem.exists(getThumbnailPath(filename));
+		return FileSystem.exists(getThumbnailPath(filename, location));
 		#else
 		return false;
 		#end
@@ -176,7 +326,7 @@ class StorageUtil
 		return StringTools.endsWith(name.toLowerCase(), ".png") ? name.substr(0, name.length - 4) : name;
 	}
 
-	static function writeMetadata(safeName:String, ?prompt:String):Void
+	static function writeMetadata(safeName:String, location:StorageLocation, ?prompt:String):Void
 	{
 		#if sys
 		try
@@ -186,7 +336,7 @@ class StorageUtil
 				savedAt: Date.now().getTime()
 			};
 
-			File.saveContent(getContentPath() + "/" + safeName + ".json", Json.stringify(metadata));
+			File.saveContent(getContentPath(location) + "/" + safeName + ".json", Json.stringify(metadata));
 		}
 		catch (e:Dynamic)
 		{
@@ -195,12 +345,12 @@ class StorageUtil
 		#end
 	}
 
-	static function readMetadata(safeName:String):{?prompt:String, ?savedAt:Float}
+	static function readMetadata(safeName:String, location:StorageLocation):{?prompt:String, ?savedAt:Float}
 	{
 		#if sys
 		try
 		{
-			var metaPath:String = getContentPath() + "/" + safeName + ".json";
+			var metaPath:String = getContentPath(location) + "/" + safeName + ".json";
 
 			if (!FileSystem.exists(metaPath))
 				return {};
@@ -216,16 +366,15 @@ class StorageUtil
 		#end
 	}
 
-	static function invalidateCache():Void
+	static function invalidateCache(location:StorageLocation):Void
 	{
-		cacheValid = false;
-		cachedInfo = null;
+		cachedInfo.remove(cast location);
 	}
 
-	public static function listSavedImages():Array<String>
+	public static function listSavedImages(location:StorageLocation = DATA):Array<String>
 	{
 		#if sys
-		var path:String = getContentPath();
+		var path:String = getContentPath(location);
 
 		if (!FileSystem.exists(path))
 			return [];
@@ -240,18 +389,18 @@ class StorageUtil
 		#end
 	}
 
-	public static function listSavedImagesWithMetadata():Array<StoredImageInfo>
+	public static function listSavedImagesWithMetadata(location:StorageLocation = DATA):Array<StoredImageInfo>
 	{
-		if (cacheValid && cachedInfo != null)
-			return cachedInfo.copy();
+		if (cachedInfo.exists(cast location))
+			return cachedInfo.get(cast location).copy();
 
 		var result:Array<StoredImageInfo> = [];
 
 		#if sys
-		for (filename in listSavedImages())
+		for (filename in listSavedImages(location))
 		{
 			var safeName:String = stripPngExtension(filename);
-			var fullPath:String = getContentPath() + "/" + filename;
+			var fullPath:String = getContentPath(location) + "/" + filename;
 
 			var sizeBytes:Int = 0;
 
@@ -261,7 +410,7 @@ class StorageUtil
 			}
 			catch (e:Dynamic) {}
 
-			var meta = readMetadata(safeName);
+			var meta = readMetadata(safeName, location);
 
 			result.push({
 				filename: filename,
@@ -280,45 +429,44 @@ class StorageUtil
 		});
 		#end
 
-		cachedInfo = result;
-		cacheValid = true;
+		cachedInfo.set(cast location, result);
 
 		return result.copy();
 	}
 
-	public static function getStorageUsageMB():Float
+	public static function getStorageUsageMB(location:StorageLocation = DATA):Float
 	{
 		var totalBytes:Int = 0;
 
-		for (info in listSavedImagesWithMetadata())
+		for (info in listSavedImagesWithMetadata(location))
 			totalBytes += info.sizeBytes;
 
 		return totalBytes / 1024 / 1024;
 	}
 
-	static function enforceQuota():Void
+	static function enforceQuota(location:StorageLocation):Void
 	{
 		#if sys
-		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata();
+		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata(location);
 
 		while (images.length >= maxStoredImages)
 		{
 			var oldest:StoredImageInfo = images.pop();
-			deleteImage(stripPngExtension(oldest.filename));
+			deleteImage(stripPngExtension(oldest.filename), location);
 		}
 
-		var usageMB:Float = getStorageUsageMB();
+		var usageMB:Float = getStorageUsageMB(location);
 
 		while (usageMB > maxStorageMB && images.length > 0)
 		{
 			var oldest:StoredImageInfo = images.pop();
-			deleteImage(stripPngExtension(oldest.filename));
+			deleteImage(stripPngExtension(oldest.filename), location);
 			usageMB -= oldest.sizeBytes / 1024 / 1024;
 		}
 		#end
 	}
 
-	public static function deleteImage(filename:String):Bool
+	public static function deleteImage(filename:String, location:StorageLocation = DATA):Bool
 	{
 		#if sys
 		var safeName:String = sanitizeFilename(filename);
@@ -329,9 +477,9 @@ class StorageUtil
 			return false;
 		}
 
-		var imagePath:String = getContentPath() + "/" + safeName + ".png";
-		var metaPath:String = getContentPath() + "/" + safeName + ".json";
-		var thumbPath:String = getContentPath() + "/" + safeName + THUMBNAIL_SUFFIX;
+		var imagePath:String = getContentPath(location) + "/" + safeName + ".png";
+		var metaPath:String = getContentPath(location) + "/" + safeName + ".json";
+		var thumbPath:String = getContentPath(location) + "/" + safeName + THUMBNAIL_SUFFIX;
 
 		try
 		{
@@ -349,7 +497,7 @@ class StorageUtil
 			if (FileSystem.exists(thumbPath))
 				FileSystem.deleteFile(thumbPath);
 
-			invalidateCache();
+			invalidateCache(location);
 
 			return deleted;
 		}
@@ -363,29 +511,29 @@ class StorageUtil
 		#end
 	}
 
-	public static function clearAll():Int
+	public static function clearAll(location:StorageLocation = DATA):Int
 	{
 		var count:Int = 0;
 
 		#if sys
-		for (filename in listSavedImages())
+		for (filename in listSavedImages(location))
 		{
-			deleteImage(stripPngExtension(filename));
+			deleteImage(stripPngExtension(filename), location);
 			count++;
 		}
 
-		invalidateCache();
+		invalidateCache(location);
 		#end
 
 		return count;
 	}
 
-	public static function findByPrompt(searchText:String):Array<StoredImageInfo>
+	public static function findByPrompt(searchText:String, location:StorageLocation = DATA):Array<StoredImageInfo>
 	{
 		var query:String = searchText.toLowerCase();
 		var results:Array<StoredImageInfo> = [];
 
-		for (info in listSavedImagesWithMetadata())
+		for (info in listSavedImagesWithMetadata(location))
 		{
 			if (info.prompt != null && info.prompt.toLowerCase().indexOf(query) != -1)
 				results.push(info);
@@ -394,7 +542,7 @@ class StorageUtil
 		return results;
 	}
 
-	public static function renameImage(oldFilename:String, newFilename:String):Bool
+	public static function renameImage(oldFilename:String, newFilename:String, location:StorageLocation = DATA):Bool
 	{
 		#if sys
 		var oldSafeName:String = sanitizeFilename(oldFilename);
@@ -406,12 +554,12 @@ class StorageUtil
 			return false;
 		}
 
-		var oldImagePath:String = getContentPath() + "/" + oldSafeName + ".png";
-		var newImagePath:String = getContentPath() + "/" + newSafeName + ".png";
-		var oldMetaPath:String = getContentPath() + "/" + oldSafeName + ".json";
-		var newMetaPath:String = getContentPath() + "/" + newSafeName + ".json";
-		var oldThumbPath:String = getContentPath() + "/" + oldSafeName + THUMBNAIL_SUFFIX;
-		var newThumbPath:String = getContentPath() + "/" + newSafeName + THUMBNAIL_SUFFIX;
+		var oldImagePath:String = getContentPath(location) + "/" + oldSafeName + ".png";
+		var newImagePath:String = getContentPath(location) + "/" + newSafeName + ".png";
+		var oldMetaPath:String = getContentPath(location) + "/" + oldSafeName + ".json";
+		var newMetaPath:String = getContentPath(location) + "/" + newSafeName + ".json";
+		var oldThumbPath:String = getContentPath(location) + "/" + oldSafeName + THUMBNAIL_SUFFIX;
+		var newThumbPath:String = getContentPath(location) + "/" + newSafeName + THUMBNAIL_SUFFIX;
 
 		if (!FileSystem.exists(oldImagePath))
 			return false;
@@ -426,7 +574,7 @@ class StorageUtil
 			if (FileSystem.exists(oldThumbPath))
 				FileSystem.rename(oldThumbPath, newThumbPath);
 
-			invalidateCache();
+			invalidateCache(location);
 
 			return true;
 		}
@@ -440,7 +588,7 @@ class StorageUtil
 		#end
 	}
 
-	public static function exportImageBytes(filename:String):haxe.io.Bytes
+	public static function exportImageBytes(filename:String, location:StorageLocation = DATA):haxe.io.Bytes
 	{
 		#if sys
 		var safeName:String = sanitizeFilename(filename);
@@ -448,7 +596,7 @@ class StorageUtil
 		if (!Guard.isSafeFilename(safeName + ".png"))
 			return null;
 
-		var path:String = getContentPath() + "/" + safeName + ".png";
+		var path:String = getContentPath(location) + "/" + safeName + ".png";
 
 		if (!FileSystem.exists(path))
 			return null;
@@ -467,24 +615,109 @@ class StorageUtil
 		#end
 	}
 
-	public static function getOldestImage():StoredImageInfo
+	public static function getOldestImage(location:StorageLocation = DATA):StoredImageInfo
 	{
-		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata();
+		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata(location);
 		return images.length > 0 ? images[images.length - 1] : null;
 	}
 
-	public static function getNewestImage():StoredImageInfo
+	public static function getNewestImage(location:StorageLocation = DATA):StoredImageInfo
 	{
-		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata();
+		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata(location);
 		return images.length > 0 ? images[0] : null;
 	}
 
+	public static function getModsPath():String
+	{
+		return getBasePath(MODS);
+	}
+
+	public static function listModFolders():Array<String>
+	{
+		#if sys
+		var path:String = getBasePath(MODS);
+
+		if (!FileSystem.exists(path))
+			return [];
+
+		var folders:Array<String> = [];
+
+		for (entry in FileSystem.readDirectory(path))
+		{
+			var fullPath:String = path + "/" + entry;
+
+			try
+			{
+				if (FileSystem.isDirectory(fullPath))
+					folders.push(entry);
+			}
+			catch (e:Dynamic) {}
+		}
+
+		return folders;
+		#else
+		return [];
+		#end
+	}
+
+	public static function getModsStorageUsageMB():Float
+	{
+		#if sys
+		var totalBytes:Int = 0;
+
+		sumDirectorySize(getBasePath(MODS), function(bytes:Int):Void
+		{
+			totalBytes += bytes;
+		});
+
+		return totalBytes / 1024 / 1024;
+		#else
+		return 0;
+		#end
+	}
+
+	#if sys
+	static function sumDirectorySize(path:String, onBytes:Int->Void):Void
+	{
+		if (!FileSystem.exists(path))
+			return;
+
+		for (entry in FileSystem.readDirectory(path))
+		{
+			var fullPath:String = path + "/" + entry;
+
+			try
+			{
+				if (FileSystem.isDirectory(fullPath))
+					sumDirectorySize(fullPath, onBytes);
+				else
+					onBytes(FileSystem.stat(fullPath).size);
+			}
+			catch (e:Dynamic) {}
+		}
+	}
+	#end
+
 	public static function getStatusSummary():String
 	{
-		var images:Array<StoredImageInfo> = listSavedImagesWithMetadata();
-		var usageMB:Float = getStorageUsageMB();
+		var lines:Array<String> = [];
 
-		return 'StorageUtil: ${images.length}/$maxStoredImages images, ${formatDecimal(usageMB, 1)}/${formatDecimal(maxStorageMB, 1)}MB';
+		var dataImages:Array<StoredImageInfo> = listSavedImagesWithMetadata(DATA);
+		lines.push('Data: ${dataImages.length}/$maxStoredImages images, ${formatDecimal(getStorageUsageMB(DATA), 1)}/${formatDecimal(maxStorageMB, 1)}MB');
+
+		if (isExternalStorageAvailable())
+		{
+			var externalImages:Array<StoredImageInfo> = listSavedImagesWithMetadata(EXTERNAL);
+			lines.push('External: ${externalImages.length} images, ${formatDecimal(getStorageUsageMB(EXTERNAL), 1)}MB');
+		}
+		else
+		{
+			lines.push("External: not available");
+		}
+
+		lines.push('Mods: ${listModFolders().length} folder(s), ${formatDecimal(getModsStorageUsageMB(), 1)}MB');
+
+		return "StorageUtil: " + lines.join(" | ");
 	}
 
 	static function formatDecimal(value:Float, decimals:Int):String
