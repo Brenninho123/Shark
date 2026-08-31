@@ -30,6 +30,7 @@ import shark.functions.ImageCreator;
 import shark.menus.MainMenuState;
 import shark.mobile.backend.Vibration.HapticStyle;
 import shark.mobile.backend.Vibration;
+import shark.mobile.StorageUtil;
 import shark.online.Online;
 import shark.online.User;
 import shark.online.manager.Internet;
@@ -66,7 +67,8 @@ typedef SettingsData = {
 	customServerLabel:String,
 	customServerChatEndpoint:String,
 	customServerImageEndpoint:String,
-	customServerApiKey:String
+	customServerApiKey:String,
+	hasRequestedExternalStoragePermission:Bool
 }
 
 class Main extends Sprite
@@ -128,6 +130,7 @@ class Main extends Sprite
 		setupLocale();
 		setupCrashReporting();
 		setupSettings();
+		requestAndroidPermissionsIfNeeded();
 		recordBootPhase("settings_ready");
 
 		ClientPrefs.initialize();
@@ -211,7 +214,8 @@ class Main extends Sprite
 			customServerLabel: "",
 			customServerChatEndpoint: "",
 			customServerImageEndpoint: "",
-			customServerApiKey: ""
+			customServerApiKey: "",
+			hasRequestedExternalStoragePermission: false
 		};
 	}
 
@@ -237,6 +241,61 @@ class Main extends Sprite
 		Vibration.setReducedMotionProvider(isReducedMotionEnabled);
 
 		debugOverlayVisible = settings.data.showFpsCounter;
+	}
+
+	public static var onExternalStoragePermissionChanged:Bool->Void;
+	static var lastKnownExternalStoragePermission:Bool = false;
+
+	static function notifyExternalStoragePermission(granted:Bool):Void
+	{
+		if (lastKnownExternalStoragePermission == granted)
+			return;
+
+		lastKnownExternalStoragePermission = granted;
+
+		if (onExternalStoragePermissionChanged != null)
+			onExternalStoragePermissionChanged(granted);
+	}
+
+	function requestAndroidPermissionsIfNeeded():Void
+	{
+		#if android
+		if (settings.data.hasRequestedExternalStoragePermission)
+			return;
+
+		StorageUtil.requestExternalStoragePermission(function(granted:Bool):Void
+		{
+			settings.update(function(d:SettingsData):Void d.hasRequestedExternalStoragePermission = true);
+
+			CrasherLog.addBreadcrumb(granted ? "External storage permission granted" : "External storage permission denied", "storage");
+
+			notifyExternalStoragePermission(granted);
+		});
+		#end
+	}
+
+	public static function hasExternalStoragePermission():Bool
+	{
+		#if android
+		return StorageUtil.hasExternalStoragePermission();
+		#else
+		return false;
+		#end
+	}
+
+	public static function requestExternalStoragePermission():Void
+	{
+		#if android
+		StorageUtil.requestExternalStoragePermission(function(granted:Bool):Void
+		{
+			if (settings != null)
+				settings.update(function(d:SettingsData):Void d.hasRequestedExternalStoragePermission = true);
+
+			CrasherLog.addBreadcrumb(granted ? "External storage permission granted" : "External storage permission denied", "storage");
+
+			notifyExternalStoragePermission(granted);
+		});
+		#end
 	}
 
 	static function isReducedMotionEnabled():Bool
@@ -955,6 +1014,8 @@ class Main extends Sprite
 			CrasherLog.getStatusSummary(),
 			"-- Settings --",
 			settings != null ? settings.getStatusSummary() : "not loaded",
+			"-- Storage --",
+			StorageUtil.getStatusSummary(),
 			"-- Native --",
 			Native.getFullReport()
 		];
@@ -1048,6 +1109,11 @@ class Main extends Sprite
 
 		if (FlxG.sound != null)
 			FlxG.sound.resume();
+
+		#if android
+		if (settings != null && settings.data.hasRequestedExternalStoragePermission)
+			notifyExternalStoragePermission(StorageUtil.hasExternalStoragePermission());
+		#end
 
 		fireResume();
 	}
