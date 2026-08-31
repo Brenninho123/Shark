@@ -648,10 +648,14 @@ class Project extends HXProject
 			activeFeatures.push("flixel-demos (debug reference)");
 		}
 
-		if (target != HTML5)
+		if (target != HTML5 && envOr("SHARK_DISABLE_DISCORD_RPC", "") != "1")
 		{
 			addHaxelib("hxdiscord_rpc", pinned);
 			activeFeatures.push("Discord Rich Presence");
+		}
+		else if (envOr("SHARK_DISABLE_DISCORD_RPC", "") == "1")
+		{
+			buildWarnings.push("hxdiscord_rpc skipped (SHARK_DISABLE_DISCORD_RPC=1) - diagnostic build.");
 		}
 
 		if (target == ANDROID)
@@ -663,10 +667,14 @@ class Project extends HXProject
 		addHaxelib("polymod", pinned);
 		activeFeatures.push("Polymod");
 
-		if (target == WINDOWS || target == MAC || target == LINUX || target == ANDROID || target == IOS)
+		if ((target == WINDOWS || target == MAC || target == LINUX || target == ANDROID || target == IOS) && envOr("SHARK_DISABLE_HXVLC", "") != "1")
 		{
 			addHaxelib("hxvlc", pinned);
 			activeFeatures.push("Video playback (hxvlc)");
+		}
+		else if (envOr("SHARK_DISABLE_HXVLC", "") == "1")
+		{
+			buildWarnings.push("hxvlc skipped (SHARK_DISABLE_HXVLC=1) - diagnostic build.");
 		}
 
 		addHaxelib("hxmath", pinned);
