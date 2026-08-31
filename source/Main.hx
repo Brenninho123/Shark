@@ -152,6 +152,7 @@ class Main extends Sprite
 		MainCpp.recordCheckpoint("lime_shark_ready");
 
 		ImageCreator.initialize();
+		shark.api.SharkAPI.initialize();
 
 		#if sys
 		try
