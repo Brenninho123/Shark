@@ -28,6 +28,7 @@ import shark.online.Online;
 import shark.online.manager.Internet;
 import shark.mobile.ui.AndroidKeyboard;
 import shark.shaders.WaterShader;
+import shark.shaders.WaterShader.IUpdatableShader;
 import shark.ui.debug.menu.DebugMenuState;
 import lime.manager.LimeManager;
 
@@ -66,7 +67,7 @@ class MainMenuState extends FlxState
 	var statusText:FlxText;
 	var thinkingText:FlxText;
 	var body:Body;
-	var waterShader:WaterShader;
+	var waterShader:IUpdatableShader;
 
 	var lightRays:Array<FlxSprite> = [];
 	var kelpBlades:Array<{sprite:FlxSprite, offset:Float, speed:Float}> = [];
@@ -266,12 +267,15 @@ class MainMenuState extends FlxState
 	{
 		var colors:Array<FlxColor> = [COLOR_MID, COLOR_WAVE, COLOR_ACCENT];
 
-		waterShader = new WaterShader();
+		waterShader = WaterShader.createForCurrentDevice();
 
 		for (i in 0...colors.length)
 		{
 			var wave = FlixelShark.makeStaticSprite(0, FlxG.height - 40 - (i * 30), FlxG.width, 60, colors[i], 0.22);
-			wave.shader = waterShader;
+
+			if (waterShader != null)
+				wave.shader = cast waterShader;
+
 			add(wave);
 
 			FlxTween.tween(wave, {x: -40}, 3 + i, {
